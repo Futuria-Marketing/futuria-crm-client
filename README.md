@@ -17,7 +17,7 @@ Copia questo testo in una chat nuova di Codex o Claude Code:
 
 ```text
 Installa la release stabile della skill Futuria CRM dal repository pubblico
-https://github.com/FuturiaMarketing/futuria-crm-client seguendo INSTALL.md.
+https://github.com/Futuria-Marketing/futuria-crm-client seguendo INSTALL.md.
 Usa il percorso previsto per il tuo runtime e apri il configuratore protetto
 incluso nella skill. Non chiedermi mai credenziali in chat o in un comando.
 Al termine verifica la connessione in sola lettura e comunicami soltanto il

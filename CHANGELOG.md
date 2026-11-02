@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1 — 2026-11-02
+
+- Moved the repository to the `Futuria-Marketing` GitHub organization: installation commands, plugin manifests and the privacy policy link now point to the new owner.
+- No change to skills, scripts or permissions. Installations from earlier tags keep working through the GitHub redirect.
+
 ## 1.3.0 — 2026-10-14
 
 - Removed the secondary skill, command, references and local Python tooling; the package installs only futuria-crm.
