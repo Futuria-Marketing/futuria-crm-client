@@ -59,4 +59,4 @@ Il repository pubblico contiene istruzioni e script, ma nessuna chiave privata e
 
 Per richieste operative o revoca dell’accesso, contattare il proprio referente Futuria Marketing: <https://futuriamarketing.com>.
 
-Questa informativa è stata verificata rispetto al comportamento tecnico della pacchetto `v1.3.0`; la validazione legale e contrattuale resta distinta.
+Questa informativa è stata verificata rispetto al comportamento tecnico del pacchetto `v1.3.2`; la validazione legale e contrattuale resta distinta.
