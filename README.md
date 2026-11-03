@@ -1,10 +1,11 @@
 # Futuria CRM — skill per agenti AI
 
-Plugin ufficiale **Futuria Marketing** per collegare Codex o Claude Code al proprio account **Futuria CRM** tramite API diretta. L’account autorizza il collegamento con un **Private Integration Token (PIT)**, presentato nel configuratore semplicemente come **chiave privata di collegamento**.
+Plugin ufficiale **Futuria Marketing** per collegare il proprio agente AI all’account **Futuria CRM** tramite API diretta. L’account autorizza il collegamento con un **Private Integration Token (PIT)**, presentato nel configuratore semplicemente come **chiave privata di collegamento**.
+
+Serve un’app installata sul computer che possa lavorare sui tuoi file: **Claude Code** (nell’app Claude per computer, sezione Code, oppure nel terminale o in VS Code) o l’**app ChatGPT per computer** in modalità **Work (Codex)**. Non funzionano claude.ai, chatgpt.com né la chat normale delle app: non possono installare la skill né aprire la configurazione protetta. Resta supportato anche Codex da terminale o in VS Code.
 
 La release attuale:
 
-- funziona con **Codex** e **Claude Code**;
 - installa la skill `futuria-crm`;
 - usa un solo account Futuria CRM;
 - non installa e non richiede alcun connettore MCP;
@@ -13,7 +14,7 @@ La release attuale:
 
 ## Il testo da incollare al proprio agente
 
-Copia questo testo in una chat nuova di Codex o Claude Code:
+Copia questo testo in una chat nuova. Usa Claude Code o l’app ChatGPT per computer in modalità Work (Codex), non la versione da browser né la chat normale.
 
 ```text
 Installa la release stabile della skill Futuria CRM dal repository pubblico
@@ -30,12 +31,12 @@ Le istruzioni operative restano in [INSTALL.md](INSTALL.md), quindi il prompt pu
 
 Dopo l’installazione l’agente apre un configuratore grafico locale. L’utente:
 
-1. apre **Integrazioni private** seguendo la guida a fisarmonica con schermate reali;
-2. crea la chiave privata nel proprio account Futuria CRM;
-3. incolla nel configuratore il link dell’account e la chiave;
+1. vede un solo modulo con due campi: il link dell’account e la chiave privata;
+2. se non sa dove trovarli, apre la guida accanto al campo: «Dove trovo il link?» oppure «Scopri dove trovare questa chiave», con il video e le schermate reali di **Integrazioni private**;
+3. crea la chiave privata nel proprio account Futuria CRM e incolla nel configuratore il link e la chiave;
 4. attende la verifica in sola lettura e torna alla chat.
 
-La pagina è disponibile soltanto sul computer dell’utente e per una sessione temporanea. La chiave non entra nel prompt, negli argomenti dei comandi o nei log del configuratore.
+La pagina è disponibile soltanto sul computer dell’utente. Il configuratore resta attivo finché la pagina è aperta e in primo piano; si ferma da solo dopo il collegamento, dopo 45 minuti in cui la pagina resta chiusa o in un’altra scheda, e comunque dopo 3 ore. In quel caso la pagina lo segnala. La chiave non entra nel prompt, negli argomenti dei comandi o nei log del configuratore.
 
 - **Windows:** la chiave viene cifrata con Windows DPAPI per l’utente corrente.
 - **macOS:** la chiave viene salvata nel Portachiavi di macOS.

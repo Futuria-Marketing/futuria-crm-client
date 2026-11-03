@@ -21,7 +21,17 @@ Never ask the user to paste the private key in chat, a prompt, a shell command, 
 
 ## 2. Guided setup for a non-technical user
 
-Resolve the launcher relative to this skill directory. It opens a temporary graphical configurator on `127.0.0.1`, outside the chat capture. The configurator contains a three-step visual guide, accepts the Futuria CRM account URL, verifies the connection read-only and stores the private key with the operating system.
+Resolve the launcher relative to this skill directory. It opens a temporary graphical configurator on `127.0.0.1`, outside the chat capture. The page is a single form with two fields, the Futuria CRM account URL and the private key; next to each field a help button opens a short guide (for the key: a video and three screenshots). It verifies the connection read-only and stores the private key with the operating system.
+
+The configurator runs in a separate process (on Windows it is created outside the agent's job object). The launcher waits until it is listening, prints the page address and returns; if the configurator cannot start, the launcher exits with an error. If the browser did not open, give the user the printed address. The page stays available while it is open and visible; the configurator closes by itself a few seconds after a successful connection, after 45 minutes without activity, or after 3 hours in any case.
+
+If the Windows launcher prints a line starting with `Attenzione: configuratore avviato senza WMI`, the configurator could not leave the agent's job and may close when the command ends. If the page then reports that it has closed, run the launcher again outside the sandbox or with elevated permissions.
+
+If the user reports that the page says the configurator has closed, do not assume the outcome: first run the status check below. If the private key is present, run the first sanity read (section 3); run the launcher again only if the key is missing or the read fails.
+
+If the page says it is no longer connected to the configurator and asks to be reloaded, the user reloads it; if the message stays, run the launcher again.
+
+If the Windows launcher says that PowerShell runs in a restricted mode because of company policies (Constrained Language Mode), the protected setup cannot work on that computer: do not retry, and ask the user to contact Futuria support.
 
 ### Windows
 

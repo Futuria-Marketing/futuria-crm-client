@@ -1,6 +1,22 @@
 (() => {
   "use strict";
 
+  // Il video della guida si carica soltanto quando il cliente apre la finestra
+  // di aiuto della chiave: all’apertura la pagina non fa richieste esterne.
+  const VIDEO_SRC = "https://futuriamarketing.com/assets/ai/futuria-crm/creare-token-pit-agents.mp4";
+  const VIDEO_POSTER = "https://futuriamarketing.com/assets/ai/futuria-crm/creare-token-pit-agents.webp";
+  const GUIDE_URL = "https://futuriamarketing.com/supporto/come-creare-token-pit-futuria-crm/";
+  const CRM_URL = "https://app.futuriamarketing.com/";
+  const HEARTBEAT_MS = 60 * 1000;
+  const CLOSED_MESSAGE = "Il configuratore si è chiuso: da questa pagina non è stata salvata nessuna chiave. Se hai già completato il collegamento in un’altra scheda puoi chiudere questa pagina, altrimenti chiedi all’agente di riaprirlo.";
+  const UNCERTAIN_MESSAGE = "Il configuratore si è chiuso durante l’invio: la chiave potrebbe essere stata salvata oppure no. Chiedi all’agente di verificare e, se serve, di riaprirlo.";
+  const UNLINKED_MESSAGE = "Questa pagina non è più collegata al configuratore. Ricaricala; se il messaggio resta, chiedi all’agente di riaprirlo.";
+  const CLOSED_MESSAGES = {
+    closed: CLOSED_MESSAGE,
+    uncertain: UNCERTAIN_MESSAGE,
+    unlinked: UNLINKED_MESSAGE,
+  };
+
   const form = document.getElementById("credential-form");
   const accountInput = document.getElementById("account-link");
   const keyInput = document.getElementById("private-key");
@@ -15,22 +31,190 @@
   const submitLabel = document.getElementById("submit-label");
   const visibilityToggle = document.getElementById("visibility-toggle");
   const successState = document.getElementById("success-state");
+  const successKicker = successState.querySelector(".success-kicker");
   const successAccount = document.getElementById("success-account");
   const cancelButton = document.getElementById("cancel-button");
   const closeButton = document.getElementById("close-button");
+  const sessionClosed = document.getElementById("session-closed");
+  const videoSlot = document.getElementById("key-video-slot");
   const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
   const previewMode = document.querySelector('meta[name="preview-mode"]').content === "true";
+  let serverClosed = false;
+  let closedReason = "";
+  let connected = false;
+  let heartbeatTimer;
+  let channel = null;
 
   if (previewMode) document.getElementById("preview-banner").hidden = false;
 
-  document.querySelectorAll("#guide-accordion details").forEach((detail) => {
-    detail.addEventListener("toggle", () => {
-      if (!detail.open) return;
-      document.querySelectorAll("#guide-accordion details").forEach((other) => {
-        if (other !== detail) other.open = false;
-      });
+  // Finestre di guida accanto ai campi: <dialog> nativo, chiusura con il
+  // pulsante, con Esc o con un clic fuori; il focus torna al pulsante di aiuto.
+  function mountVideo() {
+    if (videoSlot.querySelector("video")) return;
+    const video = document.createElement("video");
+    video.className = "guide-video";
+    video.controls = true;
+    video.preload = "none";
+    video.playsInline = true;
+    video.setAttribute("playsinline", "");
+    video.width = 1280;
+    video.height = 720;
+    video.setAttribute("aria-describedby", "key-guide-intro");
+    video.poster = VIDEO_POSTER;
+    const source = document.createElement("source");
+    source.src = VIDEO_SRC;
+    source.type = "video/mp4";
+    video.append(source);
+    videoSlot.append(video);
+  }
+
+  function unmountVideo() {
+    const video = videoSlot.querySelector("video");
+    if (!video) return;
+    // Ferma la riproduzione e il download, poi toglie il video dalla pagina.
+    video.pause();
+    video.querySelectorAll("source").forEach((source) => source.remove());
+    video.removeAttribute("src");
+    video.load();
+    video.remove();
+  }
+
+  const guides = [
+    {
+      button: document.getElementById("link-help-button"),
+      dialog: document.getElementById("link-guide"),
+      fallbackUrl: CRM_URL,
+    },
+    {
+      button: document.getElementById("key-help-button"),
+      dialog: document.getElementById("key-guide"),
+      onOpen: mountVideo,
+      onClose: unmountVideo,
+      fallbackUrl: GUIDE_URL,
+    },
+  ];
+
+  for (const { button, dialog, onOpen, onClose, fallbackUrl } of guides) {
+    button.addEventListener("click", () => {
+      if (typeof dialog.showModal !== "function") {
+        // Browser senza <dialog>: la pagina di riferimento di quel campo.
+        window.open(fallbackUrl, "_blank", "noreferrer");
+        return;
+      }
+      if (dialog.open) return;
+      if (onOpen) onOpen();
+      dialog.showModal();
     });
+    dialog.addEventListener("click", (event) => {
+      // Il contenuto riempie tutta la finestra: un clic che arriva al <dialog>
+      // stesso è un clic sullo sfondo.
+      if (event.target === dialog) dialog.close();
+    });
+    dialog.querySelectorAll("[data-close-dialog]").forEach((closeControl) => {
+      closeControl.addEventListener("click", () => dialog.close());
+    });
+    dialog.addEventListener("close", () => {
+      if (onClose) onClose();
+      // L’evento arriva dopo la chiusura: se nel frattempo il configuratore si
+      // è chiuso, il focus va all’avviso e non al pulsante di aiuto.
+      if (serverClosed) sessionClosed.focus();
+      else if (connected) successState.focus();
+      else button.focus();
+    });
+  }
+
+  function guideOpen() {
+    return guides.some(({ dialog }) => dialog.open);
+  }
+
+  function closeGuides() {
+    for (const { dialog } of guides) {
+      if (dialog.open) dialog.close();
+    }
+  }
+
+  // Il server locale vive finché la pagina è aperta: il battito lo tiene
+  // attivo e, se non risponde più, avvisa il cliente prima che incolli la chiave.
+  function showServerClosed(reason = "closed") {
+    if (connected) return;
+    // In anteprima non si salva mai nulla: l’esito non è mai incerto.
+    const effectiveReason = previewMode && reason === "uncertain" ? "closed" : reason;
+    const hadGuideOpen = guideOpen();
+    serverClosed = true;
+    clearInterval(heartbeatTimer);
+    keyInput.value = "";
+    submitButton.disabled = true;
+    form.classList.add("is-closed");
+    // Un esito incerto (chiusura durante l’invio) non torna mai al messaggio generico.
+    if (closedReason !== "uncertain") {
+      closedReason = effectiveReason;
+      sessionClosed.textContent = CLOSED_MESSAGES[effectiveReason] || CLOSED_MESSAGE;
+    }
+    sessionClosed.hidden = false;
+    // Con una guida aperta l’avviso resterebbe sotto lo sfondo, nel contenuto
+    // reso inerte dalla finestra: la guida si chiude e il focus va all’avviso.
+    if (hadGuideOpen) {
+      closeGuides();
+      sessionClosed.focus();
+    }
+  }
+
+  function showConnected(result, otherTab = false) {
+    connected = true;
+    serverClosed = false;
+    clearInterval(heartbeatTimer);
+    keyInput.value = "";
+    sessionClosed.hidden = true;
+    accountCard.classList.add("is-success");
+    accountKicker.textContent = "Account collegato";
+    accountName.textContent = result.accountName;
+    statusPill.textContent = result.preview ? "Anteprima" : "Collegato";
+    successKicker.textContent = otherTab ? "Collegamento completato in un’altra scheda" : "Collegamento completato";
+    successAccount.textContent = result.accountName;
+    closeGuides();
+    form.hidden = true;
+    successState.hidden = false;
+    successState.focus();
+  }
+
+  // Stato del configuratore: "ok"; "unlinked" se risponde ma questa pagina
+  // non ha più il cookie di sessione (403); "closed" per errore di rete, 404
+  // o configuratore in chiusura.
+  async function checkServer() {
+    try {
+      const response = await fetch("status", { cache: "no-store", credentials: "same-origin" });
+      if (response.ok) return "ok";
+      return response.status === 403 ? "unlinked" : "closed";
+    } catch {
+      return "closed";
+    }
+  }
+
+  async function heartbeat() {
+    // Solo con la pagina in vista: una scheda nascosta e dimenticata non tiene
+    // vivo il configuratore, che si chiude da solo dopo l’inattività.
+    if (serverClosed || connected || document.visibilityState !== "visible") return;
+    const state = await checkServer();
+    if (state !== "ok") showServerClosed(state);
+  }
+
+  heartbeatTimer = setInterval(heartbeat, HEARTBEAT_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") heartbeat();
   });
+
+  // Più schede della stessa sessione: se una completa il collegamento, le altre
+  // lo mostrano invece di segnalare la chiusura del configuratore.
+  try {
+    channel = new BroadcastChannel(`futuria-crm-setup:${window.location.pathname}`);
+    channel.addEventListener("message", (event) => {
+      const data = event.data;
+      if (connected || !data || data.type !== "connected" || typeof data.accountName !== "string") return;
+      showConnected({ accountName: data.accountName, preview: Boolean(data.preview) }, true);
+    });
+  } catch {
+    channel = null;
+  }
 
   function parseLocation(value) {
     const input = value.trim();
@@ -76,6 +260,11 @@
 
   accountInput.addEventListener("input", updateAccountPreview);
 
+  // La chiave resta in un campo type="password": è nascosta in ogni browser e
+  // i lettori di schermo non la leggono ad alta voce. Un campo di testo
+  // mascherato via CSS (-webkit-text-security) la lascerebbe leggibile dove
+  // il CSS non è supportato. Il browser può proporre di salvarla nel suo
+  // gestore delle password: è il male minore. «Mostra» cambia solo il tipo.
   visibilityToggle.addEventListener("click", () => {
     const showing = keyInput.type === "text";
     keyInput.type = showing ? "password" : "text";
@@ -104,42 +293,71 @@
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (serverClosed) {
+      showServerClosed(closedReason || "closed");
+      sessionClosed.focus();
+      return;
+    }
     if (!validate()) return;
 
     submitButton.disabled = true;
     submitLabel.textContent = "Verifico e collego…";
-    const privateKey = keyInput.value.trim();
-    keyInput.value = "";
 
     try {
-      const response = await fetch("connect", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Futuria-CSRF": csrfToken,
-        },
-        body: JSON.stringify({
-          accountLink: accountInput.value.trim(),
-          privateKey,
-        }),
+      // Prima di spedire la chiave: se il configuratore non risponde più, la
+      // chiave non lascia la pagina e l’avviso dice il vero (nulla è stato salvato).
+      const state = await checkServer();
+      if (state !== "ok") {
+        showServerClosed(state);
+        sessionClosed.focus();
+        return;
+      }
+
+      let body = JSON.stringify({
+        accountLink: accountInput.value.trim(),
+        privateKey: keyInput.value.trim(),
       });
-      const result = await response.json();
+      keyInput.value = "";
+
+      let response;
+      try {
+        response = await fetch("connect", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Futuria-CSRF": csrfToken,
+          },
+          body,
+        });
+      } catch {
+        // Il configuratore rispondeva un attimo prima, poi la risposta non è
+        // arrivata: il salvataggio può essere avvenuto o no.
+        showServerClosed("uncertain");
+        sessionClosed.focus();
+        return;
+      } finally {
+        body = "";
+      }
+      let result = {};
+      try {
+        result = await response.json();
+      } catch {
+        result = {};
+      }
       if (!response.ok || !result.ok) throw new Error(result.message || "Collegamento non riuscito.");
 
-      accountCard.classList.add("is-success");
-      accountKicker.textContent = "Account collegato";
-      accountName.textContent = result.accountName;
-      statusPill.textContent = result.preview ? "Anteprima" : "Collegato";
-      successAccount.textContent = result.accountName;
-      form.hidden = true;
-      successState.hidden = false;
-      successState.focus();
+      showConnected(result);
+      try {
+        if (channel) channel.postMessage({ type: "connected", accountName: result.accountName, preview: Boolean(result.preview) });
+      } catch {
+        // Le altre schede, se ci sono, mostreranno l’avviso di chiusura.
+      }
     } catch (error) {
       formError.textContent = error.message || "Collegamento non riuscito.";
       keyInput.focus();
     } finally {
-      submitButton.disabled = false;
+      submitButton.disabled = serverClosed;
       submitLabel.textContent = "Conferma e collega";
     }
   });

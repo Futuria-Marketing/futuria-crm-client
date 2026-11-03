@@ -12,118 +12,197 @@
   </head>
   <body>
     <main class="app-shell">
-      <section class="guide-panel" aria-labelledby="guide-title">
+      <section class="form-panel" aria-labelledby="form-title">
         <header class="brand-header">
           <img class="brand-logo" src="assets/futuria-crm-logo.png" alt="Futuria CRM">
-          <h1 id="guide-title">Collega Futuria CRM</h1>
-          <p>Segui la guida: la chiave resta sul computer e l’agente riceve soltanto l’esito.</p>
+          <p class="eyebrow">Configurazione protetta</p>
+          <h1 id="form-title">Collega Futuria CRM</h1>
+          <p class="form-intro">Inserisci il link del tuo account e la chiave privata. La chiave resta su questo computer: l’agente riceve soltanto l’esito.</p>
+          <p class="runtime-note" id="runtime-note">L’agente che ha aperto questa pagina deve essere Claude Code o l’app ChatGPT per computer in modalità Work (Codex), non claude.ai o chatgpt.com.</p>
         </header>
 
         <div class="preview-banner" id="preview-banner" hidden>
           Anteprima sicura: nessuna credenziale verrà salvata.
         </div>
 
-        <h2 class="section-label">Guida visiva</h2>
-        <div class="accordion" id="guide-accordion">
-          <details open>
-            <summary><span class="step-number">1</span><span>Apri Integrazioni private</span></summary>
-            <div class="step-content">
-              <p>In Futuria CRM vai su <strong>Impostazioni → Integrazioni private</strong> e seleziona <strong>Crea nuova integrazione</strong>.</p>
-              <img src="assets/step-1-private-integrations.png" alt="Schermata Integrazioni private con il pulsante Crea nuova integrazione">
-              <a class="secondary-action" href="https://app.futuriamarketing.com/" target="_blank" rel="noreferrer">Apri Futuria CRM</a>
-            </div>
-          </details>
+        <div class="session-closed" id="session-closed" role="alert" tabindex="-1" hidden>Il configuratore si è chiuso: da questa pagina non è stata salvata nessuna chiave. Se hai già completato il collegamento in un’altra scheda puoi chiudere questa pagina, altrimenti chiedi all’agente di riaprirlo.</div>
 
-          <details>
-            <summary><span class="step-number">2</span><span>Crea la chiave privata</span></summary>
-            <div class="step-content">
-              <p>Assegna un nome riconoscibile, per esempio <strong>Agente AI Futuria</strong>. Poi apri <strong>Ambiti</strong> e seleziona <strong>tutti gli ambiti disponibili</strong>: così l’agente potrà usare tutte le funzioni supportate. Gli ambiti lasciati disattivati limiteranno le azioni nelle rispettive aree.</p>
-              <img src="assets/step-2-integration-details.png" alt="Schermata di creazione di una nuova integrazione privata con la scheda Ambiti">
-            </div>
-          </details>
-
-          <details>
-            <summary><span class="step-number">3</span><span>Copia la chiave e torna qui</span></summary>
-            <div class="step-content">
-              <p>Completa la creazione, copia la chiave mostrata da Futuria CRM e incollala nel campo protetto a destra. Non inserirla mai nella chat.</p>
-              <img src="assets/step-3-paste-here.png" alt="Campi del configuratore in cui incollare il link dell’account e la chiave privata">
-            </div>
-          </details>
-        </div>
-      </section>
-
-      <section class="form-panel" aria-labelledby="form-title">
-        <div class="form-wrap">
-          <header>
-            <p class="eyebrow">Configurazione protetta</p>
-            <h2 id="form-title">Dati di collegamento</h2>
-            <p class="form-intro">Inserisci qui i due dati copiati da Futuria CRM. Restano su questo computer.</p>
-          </header>
-
-          <form id="credential-form" novalidate>
-            <div class="field-group">
+        <form id="credential-form" method="post" novalidate>
+          <div class="field-group">
+            <div class="label-row">
               <label for="account-link">Link dell’account</label>
-              <input
-                id="account-link"
-                name="account-link"
-                type="url"
-                inputmode="url"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="https://app.futuriamarketing.com/..."
-                aria-describedby="account-help account-error"
-              >
-              <p class="field-help" id="account-help">Apri il tuo account e copia l’indirizzo completo dalla barra del browser.</p>
-              <p class="field-error" id="account-error" role="alert"></p>
+              <button class="help-button" id="link-help-button" type="button" aria-haspopup="dialog" aria-controls="link-guide">
+                <svg class="help-icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+                  <circle cx="10" cy="10" r="8.25" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M7.7 7.6a2.4 2.4 0 0 1 4.6.9c0 1.6-2.3 2-2.3 3.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  <circle cx="10" cy="14.4" r="0.95" fill="currentColor"/>
+                </svg>
+                <span>Dove trovo il link?</span>
+              </button>
             </div>
-
-            <div class="field-group">
-              <label for="private-key">Chiave privata di collegamento</label>
-              <div class="password-field">
-                <input
-                  id="private-key"
-                  name="private-key"
-                  type="password"
-                  autocomplete="new-password"
-                  autocapitalize="none"
-                  spellcheck="false"
-                  placeholder="Incolla qui la chiave privata"
-                  aria-describedby="key-help key-error"
-                >
-                <button class="visibility-toggle" id="visibility-toggle" type="button" aria-controls="private-key">Mostra</button>
-              </div>
-              <p class="field-help" id="key-help">Non sarà mostrata all’agente, inviata in chat o salvata in chiaro.</p>
-              <p class="field-error" id="key-error" role="alert"></p>
-            </div>
-
-            <div class="account-card" id="account-card" aria-live="polite">
-              <div>
-                <span id="account-kicker">In attesa del link</span>
-                <strong id="account-name">Il tuo account Futuria CRM</strong>
-              </div>
-              <span class="status-pill" id="status-pill">Da verificare</span>
-            </div>
-
-            <p class="form-error" id="form-error" role="alert"></p>
-
-            <button class="primary-action" id="submit-button" type="submit">
-              <span id="submit-label">Conferma e collega</span>
-            </button>
-          </form>
-
-          <div class="success-state" id="success-state" hidden tabindex="-1">
-            <p class="success-kicker">Collegamento completato</p>
-            <h3 id="success-account">Account Futuria CRM</h3>
-            <p>La credenziale è protetta dal sistema operativo. Puoi chiudere questa pagina e tornare al tuo agente.</p>
-            <button class="primary-action" id="close-button" type="button">Chiudi il configuratore</button>
+            <input
+              id="account-link"
+              type="url"
+              inputmode="url"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="https://app.futuriamarketing.com/..."
+              aria-describedby="account-help account-error"
+            >
+            <p class="field-help" id="account-help">L’indirizzo completo del tuo account, copiato dalla barra del browser.</p>
+            <p class="field-error" id="account-error" role="alert"></p>
           </div>
 
-          <footer class="form-footer">
-            <button class="text-button" id="cancel-button" type="button">Annulla</button>
-            <a href="https://futuriamarketing.com/" target="_blank" rel="noreferrer">Serve aiuto?</a>
-          </footer>
+          <div class="field-group">
+            <div class="label-row">
+              <label for="private-key">Chiave privata di collegamento</label>
+              <button class="help-button" id="key-help-button" type="button" aria-haspopup="dialog" aria-controls="key-guide">
+                <svg class="help-icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+                  <circle cx="10" cy="10" r="8.25" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M7.7 7.6a2.4 2.4 0 0 1 4.6.9c0 1.6-2.3 2-2.3 3.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  <circle cx="10" cy="14.4" r="0.95" fill="currentColor"/>
+                </svg>
+                <span>Scopri dove trovare questa chiave</span>
+              </button>
+            </div>
+            <div class="password-field">
+              <input
+                id="private-key"
+                type="password"
+                autocomplete="new-password"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
+                placeholder="Incolla qui la chiave privata"
+                aria-describedby="key-help key-error"
+              >
+              <button class="visibility-toggle" id="visibility-toggle" type="button" aria-controls="private-key" aria-pressed="false">Mostra</button>
+            </div>
+            <p class="field-help" id="key-help">Inizia con pit-. Non sarà mostrata all’agente, inviata in chat o salvata in chiaro.</p>
+            <p class="field-error" id="key-error" role="alert"></p>
+          </div>
+
+          <div class="account-card" id="account-card" aria-live="polite">
+            <div>
+              <span id="account-kicker">In attesa del link</span>
+              <strong id="account-name">Il tuo account Futuria CRM</strong>
+            </div>
+            <span class="status-pill" id="status-pill">Da verificare</span>
+          </div>
+
+          <p class="form-error" id="form-error" role="alert"></p>
+
+          <button class="primary-action" id="submit-button" type="submit">
+            <span id="submit-label">Conferma e collega</span>
+          </button>
+        </form>
+
+        <div class="success-state" id="success-state" hidden tabindex="-1">
+          <p class="success-kicker">Collegamento completato</p>
+          <h2 id="success-account">Account Futuria CRM</h2>
+          <p>La credenziale è protetta dal sistema operativo. Puoi chiudere questa pagina e tornare al tuo agente.</p>
+          <button class="primary-action" id="close-button" type="button">Chiudi il configuratore</button>
         </div>
+
+        <footer class="form-footer">
+          <button class="text-button" id="cancel-button" type="button">Annulla</button>
+          <a href="https://futuriamarketing.com/supporto/come-creare-token-pit-futuria-crm/" target="_blank" rel="noreferrer">Serve aiuto?</a>
+        </footer>
       </section>
     </main>
+
+    <dialog class="guide-dialog" id="link-guide" aria-labelledby="link-guide-title" aria-describedby="link-guide-intro">
+      <div class="dialog-inner">
+        <header class="dialog-header">
+          <h2 id="link-guide-title">Dove trovo il link dell’account?</h2>
+          <button class="dialog-close" type="button" data-close-dialog aria-label="Chiudi la guida">
+            <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+              <path d="M5 5l10 10M15 5L5 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+            <span>Chiudi</span>
+          </button>
+        </header>
+        <div class="dialog-body">
+          <p class="dialog-intro" id="link-guide-intro">Il link è l’indirizzo della pagina del tuo account in Futuria CRM. Bastano tre passi.</p>
+          <ol class="guide-steps">
+            <li>
+              <span class="step-number" aria-hidden="true">1</span>
+              <div>
+                <strong>Apri Futuria CRM</strong>
+                <p>Accedi con il tuo utente, come fai di solito.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-number" aria-hidden="true">2</span>
+              <div>
+                <strong>Entra nel tuo account</strong>
+                <p>Se gestisci più account, apri quello da collegare all’agente.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-number" aria-hidden="true">3</span>
+              <div>
+                <strong>Copia l’indirizzo dalla barra del browser</strong>
+                <p>Seleziona tutto l’indirizzo in alto, copialo e incollalo nel campo «Link dell’account». Ha questa forma:</p>
+                <code class="link-example">https://app.futuriamarketing.com/v2/location/...</code>
+              </div>
+            </li>
+          </ol>
+          <div class="dialog-actions">
+            <a class="secondary-action" href="https://app.futuriamarketing.com/" target="_blank" rel="noreferrer">Apri Futuria CRM</a>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="guide-dialog" id="key-guide" aria-labelledby="key-guide-title" aria-describedby="key-guide-intro">
+      <div class="dialog-inner">
+        <header class="dialog-header">
+          <h2 id="key-guide-title">Dove trovo la chiave privata?</h2>
+          <button class="dialog-close" type="button" data-close-dialog aria-label="Chiudi la guida">
+            <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+              <path d="M5 5l10 10M15 5L5 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+            <span>Chiudi</span>
+          </button>
+        </header>
+        <div class="dialog-body">
+          <p class="dialog-intro" id="key-guide-intro">Video di 29 secondi: crei l’integrazione privata, selezioni tutti gli ambiti e generi la chiave da incollare qui.</p>
+          <div class="video-slot" id="key-video-slot"></div>
+
+          <h3 class="steps-title">Oppure segui i passi</h3>
+          <ol class="guide-steps">
+            <li>
+              <span class="step-number" aria-hidden="true">1</span>
+              <div>
+                <strong>Apri Integrazioni private</strong>
+                <p>In Futuria CRM vai su <strong>Impostazioni → Integrazioni private</strong> e seleziona <strong>Crea nuova integrazione</strong>.</p>
+                <img src="assets/step-1-private-integrations.png" alt="Schermata Integrazioni private con il pulsante Crea nuova integrazione" loading="lazy">
+              </div>
+            </li>
+            <li>
+              <span class="step-number" aria-hidden="true">2</span>
+              <div>
+                <strong>Crea la chiave privata</strong>
+                <p>Assegna un nome riconoscibile, per esempio <strong>Agente AI Futuria</strong>. Poi apri <strong>Ambiti</strong> e seleziona <strong>tutti gli ambiti disponibili</strong>: così l’agente potrà usare tutte le funzioni supportate. Gli ambiti lasciati disattivati limiteranno le azioni nelle rispettive aree.</p>
+                <img src="assets/step-2-integration-details.png" alt="Schermata di creazione di una nuova integrazione privata con la scheda Ambiti" loading="lazy">
+              </div>
+            </li>
+            <li>
+              <span class="step-number" aria-hidden="true">3</span>
+              <div>
+                <strong>Copia la chiave e torna qui</strong>
+                <p>Completa la creazione, copia la chiave mostrata da Futuria CRM e incollala nel campo «Chiave privata di collegamento» di questa pagina. Non inserirla mai nella chat.</p>
+                <img src="assets/step-3-paste-here.png" alt="Campi del configuratore in cui incollare il link dell’account e la chiave privata" loading="lazy">
+              </div>
+            </li>
+          </ol>
+          <div class="dialog-actions">
+            <a class="secondary-action" href="https://app.futuriamarketing.com/" target="_blank" rel="noreferrer">Apri Futuria CRM</a>
+            <a class="guide-link" href="https://futuriamarketing.com/supporto/come-creare-token-pit-futuria-crm/" target="_blank" rel="noreferrer">Apri la guida online</a>
+          </div>
+        </div>
+      </div>
+    </dialog>
   </body>
 </html>
