@@ -21,7 +21,9 @@ Never ask the user to paste the private key in chat, a prompt, a shell command, 
 
 ## 2. Guided setup for a non-technical user
 
-Resolve the launcher relative to this skill directory. It opens a temporary graphical configurator on `127.0.0.1`, outside the chat capture. The configurator contains a three-step visual guide, accepts the Futuria CRM account URL, verifies the connection read-only and stores the private key with the operating system.
+Resolve the launcher relative to this skill directory. It opens a temporary graphical configurator on `127.0.0.1`, outside the chat capture. The configurator contains a short video and a three-step visual guide, accepts the Futuria CRM account URL, verifies the connection read-only and stores the private key with the operating system.
+
+The launcher returns immediately: the configurator runs in a separate process (on Windows it is created outside the agent's job object) and stays available while the page is open. It closes by itself a few seconds after a successful connection or after 45 minutes without activity. If the user reports that the page says the configurator has closed, the key was not saved: run the launcher again and ask the user to paste the key in the new page.
 
 ### Windows
 

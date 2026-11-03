@@ -23,7 +23,25 @@
           Anteprima sicura: nessuna credenziale verrà salvata.
         </div>
 
-        <h2 class="section-label">Guida visiva</h2>
+        <section class="video-guide" aria-labelledby="video-title">
+          <h2 class="video-title" id="video-title">Guarda come si crea la chiave</h2>
+          <p class="video-intro" id="video-intro">Video di 29 secondi: crei l’integrazione privata, selezioni tutti gli ambiti e generi la chiave da incollare qui.</p>
+          <video
+            class="guide-video"
+            controls
+            preload="none"
+            playsinline
+            width="1280"
+            height="720"
+            poster="https://futuriamarketing.com/assets/ai/futuria-crm/creare-token-pit-agents.webp"
+            aria-describedby="video-intro"
+          >
+            <source src="https://futuriamarketing.com/assets/ai/futuria-crm/creare-token-pit-agents.mp4" type="video/mp4">
+          </video>
+          <a class="video-fallback" href="https://futuriamarketing.com/supporto/come-creare-token-pit-futuria-crm/" target="_blank" rel="noreferrer">Il video non parte? Apri la guida online</a>
+        </section>
+
+        <h2 class="section-label">Guida passo per passo</h2>
         <div class="accordion" id="guide-accordion">
           <details open>
             <summary><span class="step-number">1</span><span>Apri Integrazioni private</span></summary>
@@ -59,6 +77,10 @@
             <h2 id="form-title">Dati di collegamento</h2>
             <p class="form-intro">Inserisci qui i due dati copiati da Futuria CRM. Restano su questo computer.</p>
           </header>
+
+          <div class="session-closed" id="session-closed" role="alert" tabindex="-1" hidden>
+            Il configuratore si è chiuso. La chiave non è stata salvata. Chiedi all’agente di riaprirlo e incolla di nuovo la chiave.
+          </div>
 
           <form id="credential-form" novalidate>
             <div class="field-group">
@@ -120,7 +142,7 @@
 
           <footer class="form-footer">
             <button class="text-button" id="cancel-button" type="button">Annulla</button>
-            <a href="https://futuriamarketing.com/" target="_blank" rel="noreferrer">Serve aiuto?</a>
+            <a href="https://futuriamarketing.com/supporto/come-creare-token-pit-futuria-crm/" target="_blank" rel="noreferrer">Serve aiuto?</a>
           </footer>
         </div>
       </section>

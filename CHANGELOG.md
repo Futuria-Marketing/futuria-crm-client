@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.3.2 — 2026-11-03
+
+Correzione dell’errore «NetworkError when attempting to fetch resource» che compariva premendo «Conferma e collega» nel configuratore.
+
+**Causa.** La pagina provava a inviare la chiave a un configuratore locale che nel frattempo si era chiuso. Poteva succedere in tre modi:
+
+- la sessione durava 30 minuti fissi, anche con la pagina aperta, mentre il cliente era nel CRM a creare la chiave;
+- l’agente poteva chiudere il configuratore alla fine del comando o del turno: su Windows `Start-Process` lasciava il processo dentro il job dell’agente, su macOS `nohup … &` lo lasciava nel suo gruppo di processi;
+- un errore durante il salvataggio, per esempio PowerShell o `security` che chiudevano la pipe in anticipo, o un’eccezione non gestita in una richiesta, faceva cadere il server.
+
+**Correzione.**
+
+- La sessione resta aperta finché la pagina è aperta: la pagina manda un segnale ogni 60 secondi a una nuova verifica `status`, e il configuratore si chiude solo dopo 45 minuti senza richieste oppure pochi secondi dopo un collegamento riuscito.
+- Il configuratore parte in un processo separato (`--detach`), indipendente dall’agente. Su macOS nasce in una nuova sessione. Su Windows il launcher lo crea tramite WMI, fuori dal job dell’agente, e usa `Start-Process` solo se WMI non è disponibile: `--detach` da solo non basta a uscire dal job.
+- Gli errori di salvataggio e le richieste malformate ricevono una risposta di errore e il configuratore resta attivo.
+- Se il configuratore si chiude comunque, la pagina lo dice subito in italiano, disattiva il pulsante e chiede di riaprirlo dall’agente; la chiave non resta nella pagina.
+
+**Video più visibile.** In cima alla guida c’è il video di 29 secondi su come creare la chiave, con il link alla guida online; anche «Serve aiuto?» porta a quella guida. La pagina accetta immagini e video soltanto da `futuriamarketing.com`.
+
 ## 1.3.1 — 2026-11-02
 
 - Moved the repository to the `Futuria-Marketing` GitHub organization: installation commands, plugin manifests and the privacy policy link now point to the new owner.

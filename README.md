@@ -30,12 +30,12 @@ Le istruzioni operative restano in [INSTALL.md](INSTALL.md), quindi il prompt pu
 
 Dopo l’installazione l’agente apre un configuratore grafico locale. L’utente:
 
-1. apre **Integrazioni private** seguendo la guida a fisarmonica con schermate reali;
+1. apre **Integrazioni private** seguendo il video in cima alla pagina o la guida a fisarmonica con schermate reali;
 2. crea la chiave privata nel proprio account Futuria CRM;
 3. incolla nel configuratore il link dell’account e la chiave;
 4. attende la verifica in sola lettura e torna alla chat.
 
-La pagina è disponibile soltanto sul computer dell’utente e per una sessione temporanea. La chiave non entra nel prompt, negli argomenti dei comandi o nei log del configuratore.
+La pagina è disponibile soltanto sul computer dell’utente e resta attiva finché è aperta: si chiude da sola dopo il collegamento o dopo 45 minuti di inattività. La chiave non entra nel prompt, negli argomenti dei comandi o nei log del configuratore.
 
 - **Windows:** la chiave viene cifrata con Windows DPAPI per l’utente corrente.
 - **macOS:** la chiave viene salvata nel Portachiavi di macOS.

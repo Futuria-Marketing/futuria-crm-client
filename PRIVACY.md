@@ -1,6 +1,6 @@
 # Informativa tecnica sul trattamento dei dati
 
-Ultimo aggiornamento: 2026-10-14
+Ultimo aggiornamento: 2026-11-03
 
 Questa informativa descrive il funzionamento tecnico della skill **Futuria CRM** per Codex e Claude Code. Non sostituisce gli accordi privacy tra il cliente, Futuria Marketing, il fornitore dell’agente AI e gli interessati presenti nel CRM.
 
@@ -39,6 +39,7 @@ Riferimenti dei fornitori:
 - **macOS:** la chiave privata viene salvata nel Portachiavi di macOS.
 - L’identificativo dell’account viene salvato in un piccolo file di configurazione locale.
 - Il configuratore grafico viene servito temporaneamente soltanto su `127.0.0.1`; non invia telemetria e non conserva la chiave nei log o nella cache del browser.
+- La guida video del configuratore viene caricata da `futuriamarketing.com`: all’apertura il browser scarica l’immagine di anteprima e, solo se l’utente preme play, il video. Nessun dato inserito nel configuratore viene inviato con queste richieste.
 - Come fallback tecnico, l’utente può scegliere variabili d’ambiente; non sono il percorso consigliato per utenti non tecnici.
 
 ## Controlli dell’utente

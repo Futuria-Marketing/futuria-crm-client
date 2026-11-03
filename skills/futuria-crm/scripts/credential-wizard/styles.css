@@ -132,6 +132,67 @@ h1 {
   font-weight: 650;
 }
 
+.video-guide {
+  margin: 0 0 28px;
+  padding: 18px;
+  background: #fff;
+  border: 1px solid #9fc987;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(16, 61, 102, 0.06);
+}
+
+.video-title {
+  margin-bottom: 6px;
+  font-size: 1.12rem;
+  line-height: 1.25;
+}
+
+.video-intro {
+  margin-bottom: 14px;
+  color: #3f5366;
+  font-size: 0.89rem;
+  line-height: 1.55;
+}
+
+.guide-video {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  background: var(--navy-deep);
+  border: 1px solid #d2dbe2;
+  border-radius: 8px;
+}
+
+.video-fallback {
+  display: inline-block;
+  margin-top: 12px;
+  color: #075bb5;
+  font-size: 0.88rem;
+  font-weight: 620;
+}
+
+.session-closed {
+  margin: -14px 0 28px;
+  padding: 14px 16px;
+  color: var(--danger);
+  background: #fdf3f3;
+  border: 1px solid #e3b1b1;
+  border-radius: 8px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.session-closed:focus-visible {
+  outline: 3px solid rgba(168, 50, 50, 0.3);
+  outline-offset: 2px;
+}
+
+#credential-form.is-closed .primary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .section-label {
   margin: 0 0 10px;
   font-size: 0.95rem;
@@ -516,6 +577,10 @@ a:focus-visible {
 
   .brand-logo {
     width: 220px;
+  }
+
+  .video-guide {
+    padding: 14px;
   }
 
   .account-card {

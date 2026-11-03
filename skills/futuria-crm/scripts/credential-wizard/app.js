@@ -18,10 +18,41 @@
   const successAccount = document.getElementById("success-account");
   const cancelButton = document.getElementById("cancel-button");
   const closeButton = document.getElementById("close-button");
+  const sessionClosed = document.getElementById("session-closed");
   const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
   const previewMode = document.querySelector('meta[name="preview-mode"]').content === "true";
+  const HEARTBEAT_MS = 60 * 1000;
+  let serverClosed = false;
+  let connected = false;
+  let heartbeatTimer;
 
   if (previewMode) document.getElementById("preview-banner").hidden = false;
+
+  // Il server locale vive finché la pagina è aperta: il battito lo tiene
+  // attivo e, se non risponde più, avvisa il cliente prima che incolli la chiave.
+  function showServerClosed() {
+    serverClosed = true;
+    clearInterval(heartbeatTimer);
+    keyInput.value = "";
+    submitButton.disabled = true;
+    form.classList.add("is-closed");
+    sessionClosed.hidden = false;
+  }
+
+  async function heartbeat() {
+    if (serverClosed || connected) return;
+    try {
+      const response = await fetch("status", { cache: "no-store", credentials: "same-origin" });
+      if (!response.ok) throw new Error("status");
+    } catch {
+      if (!connected) showServerClosed();
+    }
+  }
+
+  heartbeatTimer = setInterval(heartbeat, HEARTBEAT_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") heartbeat();
+  });
 
   document.querySelectorAll("#guide-accordion details").forEach((detail) => {
     detail.addEventListener("toggle", () => {
@@ -104,29 +135,51 @@
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (serverClosed) {
+      showServerClosed();
+      sessionClosed.focus();
+      return;
+    }
     if (!validate()) return;
 
     submitButton.disabled = true;
     submitLabel.textContent = "Verifico e collego…";
-    const privateKey = keyInput.value.trim();
+    let body = JSON.stringify({
+      accountLink: accountInput.value.trim(),
+      privateKey: keyInput.value.trim(),
+    });
     keyInput.value = "";
 
     try {
-      const response = await fetch("connect", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Futuria-CSRF": csrfToken,
-        },
-        body: JSON.stringify({
-          accountLink: accountInput.value.trim(),
-          privateKey,
-        }),
-      });
-      const result = await response.json();
+      let response;
+      try {
+        response = await fetch("connect", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Futuria-CSRF": csrfToken,
+          },
+          body,
+        });
+      } catch {
+        // Il server locale non risponde più: niente errore tecnico del browser.
+        showServerClosed();
+        sessionClosed.focus();
+        return;
+      } finally {
+        body = "";
+      }
+      let result = {};
+      try {
+        result = await response.json();
+      } catch {
+        result = {};
+      }
       if (!response.ok || !result.ok) throw new Error(result.message || "Collegamento non riuscito.");
 
+      connected = true;
+      clearInterval(heartbeatTimer);
       accountCard.classList.add("is-success");
       accountKicker.textContent = "Account collegato";
       accountName.textContent = result.accountName;
@@ -139,7 +192,7 @@
       formError.textContent = error.message || "Collegamento non riuscito.";
       keyInput.focus();
     } finally {
-      submitButton.disabled = false;
+      submitButton.disabled = serverClosed;
       submitLabel.textContent = "Conferma e collega";
     }
   });

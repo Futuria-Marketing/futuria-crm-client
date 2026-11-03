@@ -15,13 +15,19 @@ import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 
-const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const SCRIPT_PATH = fileURLToPath(import.meta.url);
+const SCRIPT_DIR = dirname(SCRIPT_PATH);
 const UI_DIR = join(SCRIPT_DIR, "credential-wizard");
 const SERVICE = "com.futuriamarketing.futuria-crm.pit";
 const ACCOUNT = "default";
 const MAX_BODY_BYTES = 16 * 1024;
-const SESSION_TTL_MS = 30 * 60 * 1000;
+// La sessione resta aperta finché la pagina dà segni di vita (battito ogni
+// 60 secondi) e si chiude dopo 45 minuti senza richieste valide.
+const SESSION_IDLE_MS = 45 * 60 * 1000;
+const CLOSE_AFTER_SUCCESS_MS = 3000;
+const MEDIA_ORIGIN = "https://futuriamarketing.com";
 
 const STATIC_FILES = new Map([
   ["app.js", "application/javascript; charset=utf-8"],
@@ -78,11 +84,12 @@ function safeEqual(left, right) {
 }
 
 function parseArgs(argv) {
-  const result = { preview: false, noOpen: false, port: 0 };
+  const result = { preview: false, noOpen: false, detach: false, port: 0 };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--preview") result.preview = true;
     else if (arg === "--no-open") result.noOpen = true;
+    else if (arg === "--detach") result.detach = true;
     else if (arg === "--port") {
       const port = Number.parseInt(argv[index + 1], 10);
       if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -105,7 +112,7 @@ export function windowsPowerShellEnvironment(source = process.env) {
   return environment;
 }
 
-function runChild(command, args, input = "", options = {}) {
+export function runChild(command, args, input = "", options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       ...options,
@@ -116,6 +123,10 @@ function runChild(command, args, input = "", options = {}) {
     child.stderr.on("data", (chunk) => {
       if (stderr.length < 4096) stderr += chunk.toString("utf8");
     });
+    // Se il processo esce prima di leggere l’input la pipe si rompe (EPIPE):
+    // senza questo gestore l’errore farebbe cadere l’intero configuratore.
+    // L’esito resta deciso dal codice di uscita in "close".
+    child.stdin.on("error", () => {});
     child.on("error", reject);
     child.on("close", (code) => {
       if (code === 0) resolve();
@@ -293,14 +304,24 @@ export async function startWizard(options = {}) {
   const preview = Boolean(options.preview);
   const noOpen = Boolean(options.noOpen);
   const requestedPort = Number.isInteger(options.port) ? options.port : 0;
+  // Tempi regolabili soltanto dai test: la riga di comando non li espone.
+  const idleTimeoutMs = Number.isInteger(options.idleTimeoutMs) && options.idleTimeoutMs > 0
+    ? options.idleTimeoutMs
+    : SESSION_IDLE_MS;
+  const closeAfterSuccessMs = Number.isInteger(options.closeAfterSuccessMs) && options.closeAfterSuccessMs >= 0
+    ? options.closeAfterSuccessMs
+    : CLOSE_AFTER_SUCCESS_MS;
   const sessionId = preview ? "preview" : randomBytes(18).toString("hex");
   const csrfToken = randomBytes(24).toString("hex");
   const cookieToken = randomBytes(24).toString("hex");
   const sessionRoot = `/${sessionId}/`;
   let allowedOrigin = "";
   let attempts = [];
+  let idleTimer;
+  let successTimer;
+  let closing = false;
 
-  const server = createServer(async (req, res) => {
+  async function handleRequest(req, res) {
     const expectedHost = allowedOrigin.replace("http://", "");
     if (req.headers.host !== expectedHost) {
       sendJson(res, 400, { ok: false, message: "Richiesta locale non valida." });
@@ -313,15 +334,21 @@ export async function startWizard(options = {}) {
       return;
     }
     const relativePath = requestUrl.pathname.slice(sessionRoot.length);
+    touch();
 
     if (req.method === "GET" && relativePath === "") {
       const template = readFileSync(join(UI_DIR, "index.html"), "utf8")
         .replaceAll("__CSRF_TOKEN__", csrfToken)
         .replaceAll("__PREVIEW_MODE__", preview ? "true" : "false");
       send(res, 200, template, "text/html; charset=utf-8", {
-        "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'",
+        "Content-Security-Policy": `default-src 'none'; img-src 'self' ${MEDIA_ORIGIN}; media-src ${MEDIA_ORIGIN}; style-src 'self'; script-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'`,
         "Set-Cookie": `futuria_setup=${cookieToken}; HttpOnly; SameSite=Strict; Path=${sessionRoot}`,
       });
+      return;
+    }
+
+    if (req.method === "GET" && relativePath === "status") {
+      sendJson(res, 200, { ok: true });
       return;
     }
 
@@ -378,6 +405,11 @@ export async function startWizard(options = {}) {
           accountName: verification.accountName,
           preview,
         });
+        // Collegamento riuscito: la pagina ha già l’esito, il server si chiude.
+        if (!successTimer) {
+          successTimer = setTimeout(shutdown, closeAfterSuccessMs);
+          successTimer.unref();
+        }
       } catch (error) {
         sendJson(res, 400, { ok: false, message: error?.message || "Configurazione non riuscita." });
       } finally {
@@ -388,7 +420,44 @@ export async function startWizard(options = {}) {
     }
 
     sendJson(res, 404, { ok: false, message: "Risorsa non trovata." });
+  }
+
+  const server = createServer(async (req, res) => {
+    try {
+      await handleRequest(req, res);
+    } catch {
+      // Nessun dettaglio tecnico verso la pagina: potrebbe contenere dati locali.
+      if (!res.headersSent) {
+        sendJson(res, 500, { ok: false, message: "Errore interno del configuratore. Riprova." });
+      } else {
+        res.destroy();
+      }
+    }
   });
+
+  server.on("clientError", (error, socket) => {
+    if (error?.code === "ECONNRESET" || !socket.writable) {
+      socket.destroy();
+      return;
+    }
+    socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+  });
+
+  function shutdown() {
+    if (closing) return;
+    closing = true;
+    clearTimeout(idleTimer);
+    clearTimeout(successTimer);
+    server.close();
+    server.closeIdleConnections?.();
+  }
+
+  function touch() {
+    if (closing) return;
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(shutdown, idleTimeoutMs);
+    idleTimer.unref();
+  }
 
   await new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -398,18 +467,39 @@ export async function startWizard(options = {}) {
   const address = server.address();
   allowedOrigin = `http://127.0.0.1:${address.port}`;
   const url = `${allowedOrigin}${sessionRoot}`;
-  const expiry = setTimeout(() => server.close(), SESSION_TTL_MS);
-  expiry.unref();
+  touch();
 
   if (!noOpen) openBrowser(url);
   return { server, url, sessionRoot };
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// Avvia il configuratore in un processo staccato: su macOS e Linux crea una
+// nuova sessione (setsid), quindi sopravvive alla chiusura del gruppo di
+// processi dell’agente; su Windows non ha console e non tiene aperte le pipe
+// dell’agente. Il padre attende solo l’avvio del figlio ed esce subito.
+export async function startDetached(args, scriptPath = SCRIPT_PATH) {
+  const child = spawn(process.execPath, [scriptPath, ...args], {
+    cwd: homedir(),
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  await once(child, "spawn");
+  child.unref();
+  return child.pid;
+}
+
+if (process.argv[1] && SCRIPT_PATH === process.argv[1]) {
   try {
-    const args = parseArgs(process.argv.slice(2));
-    const { url } = await startWizard(args);
-    process.stdout.write(`Configuratore Futuria CRM disponibile su ${url}\n`);
+    const rawArgs = process.argv.slice(2);
+    const args = parseArgs(rawArgs);
+    if (args.detach) {
+      const pid = await startDetached(rawArgs.filter((arg) => arg !== "--detach"));
+      process.stdout.write(`Configuratore Futuria CRM avviato in un processo separato (PID ${pid}).\n`);
+    } else {
+      const { url } = await startWizard(args);
+      process.stdout.write(`Configuratore Futuria CRM disponibile su ${url}\n`);
+    }
   } catch (error) {
     process.stderr.write(`Impossibile avviare il configuratore: ${error.message}\n`);
     process.exitCode = 1;

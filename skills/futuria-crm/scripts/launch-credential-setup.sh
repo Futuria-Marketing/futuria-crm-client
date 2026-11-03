@@ -11,7 +11,10 @@ wizard_script="${script_dir}/credential-wizard.mjs"
 setup_script="${script_dir}/setup-credentials.sh"
 
 if [[ -f "${wizard_script}" ]] && command -v node >/dev/null 2>&1; then
-  nohup node "${wizard_script}" >/dev/null 2>&1 &
+  # --detach avvia il configuratore in una nuova sessione (setsid): resta
+  # attivo anche quando l'agente chiude il proprio gruppo di processi.
+  # ${1+"$@"} inoltra --preview o --no-open anche con Bash 3 e set -u.
+  node "${wizard_script}" --detach ${1+"$@"} >/dev/null
   echo "Configuratore grafico Futuria CRM aperto nel browser."
   exit 0
 fi
