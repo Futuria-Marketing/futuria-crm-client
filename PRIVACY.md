@@ -35,9 +35,9 @@ Riferimenti dei fornitori:
 
 ## Conservazione locale
 
-- **Windows:** la chiave privata viene cifrata con la protezione dati dell’utente Windows e salvata nel profilo locale dell’utente.
-- **macOS:** la chiave privata viene salvata nel Portachiavi di macOS.
-- L’identificativo dell’account viene salvato in un piccolo file di configurazione locale.
+- **Windows:** la chiave privata viene cifrata con la protezione dati dell’utente Windows (DPAPI) e salvata, insieme all’identificativo dell’account, nella cartella `%USERPROFILE%\.futuria-crm-skill\`.
+- **macOS:** la chiave privata viene salvata nel Portachiavi di macOS. L’identificativo dell’account sta nel file `~/Library/Application Support/com.futuriamarketing.futuria-crm-skill/config.json`, che contiene solo quell’ID.
+- La skill non usa la cartella dell’app desktop Futuria CRM (`%APPDATA%\Futuria CRM` su Windows, `~/Library/Application Support/Futuria CRM` su macOS), che le versioni fino alla 1.3.2 condividevano con l’app. All’aggiornamento copia da lì nella propria cartella soltanto i propri file. Per riconoscerli legge al massimo `credential.xml` e un `config.json` non più grande di 1 KiB, senza conservarne, mostrarne o registrarne il contenuto; i file dell’app non vengono copiati né modificati.
 - Il configuratore grafico viene servito temporaneamente soltanto su `127.0.0.1`; non invia telemetria e non conserva la chiave nei log o nella cache del browser. Il campo della chiave è un campo password: il browser può proporre di salvarla nel proprio gestore delle password, e non serve accettare.
 - All’apertura il configuratore non fa richieste verso l’esterno. Solo se l’utente apre la guida della chiave il browser scarica da `futuriamarketing.com` l’immagine di anteprima del video e, se l’utente preme play, il video. Nessun dato inserito nel configuratore viene inviato con queste richieste.
 - Come fallback tecnico, l’utente può scegliere variabili d’ambiente; non sono il percorso consigliato per utenti non tecnici.
@@ -47,7 +47,7 @@ Riferimenti dei fornitori:
 L’utente può:
 
 - revocare o rigenerare la chiave privata dal proprio account Futuria CRM;
-- rimuovere la copia locale con gli script di configurazione inclusi;
+- rimuovere la copia locale con gli script di configurazione inclusi: la rimozione toglie anche le vecchie copie della skill nella cartella dell’app desktop, mai i file dell’app. Se usi anche l’app desktop, l’ID account può restare nel file di configurazione dell’app: la skill non lo modifica per non danneggiarla;
 - disinstallare o disabilitare la skill;
 - limitare gli ambiti assegnati alla chiave.
 
@@ -59,4 +59,4 @@ Il repository pubblico contiene istruzioni e script, ma nessuna chiave privata e
 
 Per richieste operative o revoca dell’accesso, contattare il proprio referente Futuria Marketing: <https://futuriamarketing.com>.
 
-Questa informativa è stata verificata rispetto al comportamento tecnico del pacchetto `v1.3.2`; la validazione legale e contrattuale resta distinta.
+Questa informativa è stata verificata rispetto al comportamento tecnico del pacchetto `v1.3.3`; la validazione legale e contrattuale resta distinta.

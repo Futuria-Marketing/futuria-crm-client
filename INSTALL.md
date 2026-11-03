@@ -21,7 +21,7 @@ Il collegamento usa API diretta e una credenziale chiamata **Private Integration
 
 ## Release stabile
 
-Versione del pacchetto: `v1.3.2`. I comandi seguenti richiedono che il tag e la release `v1.3.2` siano pubblicati prima della distribuzione guidata.
+Versione del pacchetto: `v1.3.3`. I comandi seguenti richiedono che il tag e la release `v1.3.3` siano pubblicati prima della distribuzione guidata.
 
 Repository: `https://github.com/Futuria-Marketing/futuria-crm-client`.
 
@@ -30,9 +30,9 @@ Repository: `https://github.com/Futuria-Marketing/futuria-crm-client`.
 Per l’installazione eseguita direttamente dall’agente, usare il percorso personale ufficiale delle skill di Claude Code:
 
 1. Destinazione: `~/.claude/skills/futuria-crm-client`.
-2. Se la cartella non esiste, clonare `https://github.com/Futuria-Marketing/futuria-crm-client.git` alla release `v1.3.2` con cronologia ridotta.
-3. Se esiste già, verificare prima che sia la copia di questo repository e che non contenga modifiche locali; solo in quel caso aggiornare al tag `v1.3.2`. Non cancellare o sovrascrivere una cartella ambigua.
-4. Se Git non è disponibile, scaricare l’archivio GitHub del tag `v1.3.2` ed estrarlo atomicamente nella stessa destinazione.
+2. Se la cartella non esiste, clonare `https://github.com/Futuria-Marketing/futuria-crm-client.git` alla release `v1.3.3` con cronologia ridotta.
+3. Se esiste già, verificare prima che sia la copia di questo repository e che non contenga modifiche locali; solo in quel caso aggiornare al tag `v1.3.3`. Non cancellare o sovrascrivere una cartella ambigua.
+4. Se Git non è disponibile, scaricare l’archivio GitHub del tag `v1.3.3` ed estrarlo atomicamente nella stessa destinazione.
 5. Eseguire `claude plugin details futuria-crm@skills-dir` quando disponibile, quindi `/reload-plugins` oppure aprire una nuova sessione.
 
 Claude Code riconosce come plugin personale ogni cartella sotto `~/.claude/skills/` che contiene `.claude-plugin/plugin.json`; non serve registrare un marketplace per questo percorso.
@@ -40,7 +40,7 @@ Claude Code riconosce come plugin personale ogni cartella sotto `~/.claude/skill
 Il marketplace resta disponibile per l’installazione manuale da una sessione Claude Code:
 
 ```text
-/plugin marketplace add https://github.com/Futuria-Marketing/futuria-crm-client.git#v1.3.2
+/plugin marketplace add https://github.com/Futuria-Marketing/futuria-crm-client.git#v1.3.3
 /plugin install futuria-crm@futuria-crm
 ```
 
@@ -52,16 +52,16 @@ Usare la skill di sistema `$skill-installer` per installare la skill dalla relea
 
 ```text
 Installa con $skill-installer dal repository Futuria-Marketing/futuria-crm-client,
-ref v1.3.2, la cartella skills/futuria-crm.
+ref v1.3.3, la cartella skills/futuria-crm.
 ```
 
-Se `$skill-installer` non è disponibile, scaricare la release `v1.3.2` e copiare la cartella sotto la directory personale delle skill di Codex, senza sovrascrivere directory ambigue. Aprire una nuova chat se le skill non vengono rilevate subito.
+Se `$skill-installer` non è disponibile, scaricare la release `v1.3.3` e copiare la cartella sotto la directory personale delle skill di Codex, senza sovrascrivere directory ambigue. Aprire una nuova chat se le skill non vengono rilevate subito.
 
-Il repository include anche il manifest `.codex-plugin/plugin.json` e il marketplace `.agents/plugins/marketplace.json`. `codex plugin marketplace add Futuria-Marketing/futuria-crm-client@v1.3.2` registra il catalogo nei client che lo supportano, ma non va confuso con l’installazione della skill.
+Il repository include anche il manifest `.codex-plugin/plugin.json` e il marketplace `.agents/plugins/marketplace.json`. `codex plugin marketplace add Futuria-Marketing/futuria-crm-client@v1.3.3` registra il catalogo nei client che lo supportano, ma non va confuso con l’installazione della skill.
 
 ## Configurazione grafica protetta
 
-Individuare la cartella installata della skill `futuria-crm`, quindi eseguire il launcher adatto al sistema operativo. Il launcher usa Node.js, già presente nella maggior parte degli ambienti Codex e Claude Code, per aprire una pagina raggiungibile soltanto su `127.0.0.1`. Il launcher avvia il configuratore in un processo separato, attende che sia pronto, stampa l’indirizzo della pagina e termina; se il configuratore non parte, lo segnala con un errore. Il configuratore resta attivo finché la pagina è aperta e in primo piano; si ferma da solo dopo il collegamento, dopo 45 minuti in cui la pagina resta chiusa o in un’altra scheda, e comunque dopo 3 ore. In quel caso la pagina lo segnala.
+Individuare la cartella installata della skill `futuria-crm`, quindi eseguire il launcher adatto al sistema operativo. Il launcher usa Node.js 20 o successivo, già presente nella maggior parte degli ambienti Codex e Claude Code, per aprire una pagina raggiungibile soltanto su `127.0.0.1`. Il launcher avvia il configuratore in un processo separato, attende che sia pronto, stampa l’indirizzo della pagina e termina; se il configuratore non parte, lo segnala con un errore. Il configuratore resta attivo finché la pagina è aperta e in primo piano; si ferma da solo dopo il collegamento, dopo 45 minuti in cui la pagina resta chiusa o in un’altra scheda, e comunque dopo 3 ore. In quel caso la pagina lo segnala.
 
 La pagina:
 
@@ -80,7 +80,7 @@ Dal terminale dell’agente eseguire:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<skill-futuria-crm>\scripts\launch-credential-setup.ps1"
 ```
 
-Il browser apre il configuratore. Dopo la verifica, la chiave viene cifrata con Windows DPAPI per l’utente corrente. L’ID account viene salvato nella configurazione locale e non è un segreto.
+Il browser apre il configuratore. Dopo la verifica, la chiave viene cifrata con Windows DPAPI per l’utente corrente. Chiave cifrata e ID account, che non è un segreto, stanno nella cartella dedicata della skill `%USERPROFILE%\.futuria-crm-skill\`, separata da quella dell’app desktop Futuria CRM.
 
 ### macOS
 
@@ -90,7 +90,13 @@ Dal terminale dell’agente eseguire:
 bash "<skill-futuria-crm>/scripts/launch-credential-setup.sh"
 ```
 
-Il browser apre lo stesso configuratore. Dopo la verifica, la chiave viene salvata nel Portachiavi dell’utente macOS senza comparire negli argomenti di processo o nel profilo shell.
+Il browser apre lo stesso configuratore. Dopo la verifica, la chiave viene salvata nel Portachiavi dell’utente macOS senza comparire negli argomenti di processo o nel profilo shell. L’ID account sta nella cartella dedicata della skill `~/Library/Application Support/com.futuriamarketing.futuria-crm-skill/`, separata da quella dell’app desktop Futuria CRM.
+
+### Aggiornamento dalla 1.3.2 o precedenti
+
+Fino alla 1.3.2 la skill usava la cartella dell’app desktop Futuria CRM. Dalla 1.3.3 copia da sola i propri file nella nuova cartella al primo controllo, senza toccare quelli dell’app. Chi usa anche l’app desktop dovrà ricollegare l’account una volta: quando lo stato dice `Serve ricollegare l'account`, avviare il launcher una sola volta.
+
+Aggiorna il plugin in tutti gli agenti che usi sullo stesso computer, per esempio Claude Code e Codex, e riavvia le sessioni aperte. Finché un’installazione resta alla versione precedente continua a usare la vecchia cartella: se ci si ricollega da lì, può scollegare l’app desktop e la versione aggiornata resta sul collegamento precedente.
 
 ### Fallback senza Node.js
 
@@ -98,6 +104,8 @@ Se `node` non è disponibile, lo stesso launcher apre automaticamente il prompt 
 
 - PowerShell con input nascosto e DPAPI su Windows;
 - Terminale con input nascosto e Portachiavi su macOS.
+
+Anche il prompt salva soltanto nella cartella dedicata della skill.
 
 Non installare Node.js soltanto per il configuratore senza prima informare l’utente.
 

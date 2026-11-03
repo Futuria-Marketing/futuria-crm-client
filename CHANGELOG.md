@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.3.3 — 2026-11-03
+
+Correzione: la skill usava la stessa cartella dell’app desktop Futuria CRM.
+
+**Causa.** Dalla prima versione pubblica la skill salvava la chiave privata protetta e l’ID account in `%APPDATA%\Futuria CRM` su Windows e in `~/Library/Application Support/Futuria CRM` su macOS. È la cartella dell’app desktop Futuria CRM, che lì tiene il proprio file `config.json`. Così collegare la skill sovrascriveva la configurazione dell’app, la rimozione poteva cancellarla e l’app, riscrivendo il file, poteva far perdere alla skill l’ID account.
+
+**Correzione.**
+
+- La skill ha una cartella tutta sua: `%USERPROFILE%\.futuria-crm-skill\` su Windows e `~/Library/Application Support/com.futuriamarketing.futuria-crm-skill/` su macOS. Su Windows sta fuori da AppData, così resta la stessa anche quando l’agente gira dentro un’app installata dallo Store. La chiave è protetta come prima, con Windows DPAPI o con il Portachiavi di macOS.
+- Al primo controllo dello stato o alla prima chiamata API, la skill copia nella nuova cartella i propri file della versione precedente. Copia solo i file che riconosce con certezza come suoi; la configurazione dell’app non viene mai copiata, modificata o cancellata. La vecchia cartella resta com’è, così un’installazione non ancora aggiornata continua a funzionare. Se la copia non riesce, per esempio dentro una sandbox, la skill usa i vecchi file in sola lettura e riprova la volta successiva.
+- Il configuratore scrive solo nella nuova cartella, prima in un file temporaneo e poi con una sostituzione atomica: un nuovo collegamento sostituisce sempre il precedente e un’interruzione non lascia mai la chiave di un account insieme all’ID di un altro.
+- Il controllo dello stato verifica davvero la chiave e l’ID account, non solo che i file esistano. Dice se la chiave manca o non è leggibile, se manca l’ID account e quando serve ricollegare l’account. Su macOS mostra le stesse righe di Windows.
+- I messaggi per l’agente distinguono i casi (manca tutto, manca l’ID account, manca la chiave, chiave non leggibile, Portachiavi bloccato) e iniziano con un codice stabile, per esempio `[futuria-crm:id-mancante]`. Così l’agente sa se riaprire il configuratore, far ricollegare l’account o chiedere di sbloccare il Portachiavi.
+- La rimozione cancella la nuova cartella e le vecchie copie della skill, mai i file dell’app desktop. Se l’app è aperta, la vecchia copia dell’ID account resta finché l’app non viene chiusa e la rimozione ripetuta.
+
+**Cosa succede a chi ha già configurato la skill.**
+
+- Chi non usa l’app desktop non deve fare nulla: la configurazione viene copiata da sola.
+- Chi usa anche l’app desktop dovrà ricollegare l’account una volta: la vecchia configurazione della skill era mescolata con quella dell’app e la skill non la riusa, per non dipendere dai dati dell’app. L’agente lo chiede da solo e apre il configuratore.
+- Se il controllo dice che manca la chiave (può capitare a chi aveva configurato la skill dall’interno di un’app installata dallo Store), basta ricollegarsi una volta.
+- L’app desktop potrebbe chiedere di nuovo l’accesso, perché la skill ne aveva già sovrascritto la configurazione: questo la skill non può ripararlo.
+- Aggiorna il plugin in tutti gli agenti che usi, per esempio Claude Code e Codex, e riavvia le sessioni aperte. Un’installazione rimasta alla versione precedente continua a usare la vecchia cartella: se la usi per ricollegarti può scollegare l’app desktop, e la versione aggiornata resta sul collegamento precedente. Il controllo dello stato lo segnala.
+- Tornare alla 1.3.2 resta possibile, perché la vecchia cartella non viene toccata.
+
 ## 1.3.2 — 2026-11-03
 
 Correzione dell’errore «NetworkError when attempting to fetch resource» che compariva premendo «Conferma e collega» nel configuratore.

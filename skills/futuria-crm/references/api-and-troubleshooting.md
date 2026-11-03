@@ -7,7 +7,7 @@ The direct API is the **primary channel** for operating the user's Futuria CRM a
 ## Secure request rules
 
 - Base URL: `https://services.leadconnectorhq.com` — every path in the area references is relative to it.
-- Use the bundled helper for every API request. It loads the PIT internally from Windows DPAPI, macOS Keychain, or the environment fallback, and accepts only relative paths on the fixed Futuria CRM API host.
+- Use the bundled helper for every API request. It loads the PIT internally from Windows DPAPI, macOS Keychain, or the environment fallback, reads the account id from the skill's own folder (never from the Futuria CRM desktop app's folder), and accepts only relative paths on the fixed Futuria CRM API host. When something is missing it stops before any request with one of the coded messages below.
 - The helper adds the Authorization, Version and Accept headers. It adds the JSON content type on writes. It defaults to the validated V2 date header used by the endpoint tables; pass `-Version v3` on Windows or set `FUTURIA_CRM_API_VERSION=v3` on macOS only for an endpoint whose reference explicitly requires V3.
 - Never construct or display a raw Authorization header in the conversation.
 
@@ -54,16 +54,32 @@ Other validated quirks:
 
 ## Credential and account diagnostics
 
-1. Run the protected setup script with `-Status` on Windows or `status` on macOS. It reports only presence or absence.
+1. Run the protected setup script with `-Status` on Windows or `status` on macOS. It never prints values: it checks that the private key can really be read (`presente`, `mancante`, `non leggibile` on Windows, `non accessibile` on macOS) and that the stored account id is valid, says when the account must be connected again, and exits with 0 only when both are valid.
 2. Confirm that the account id is separate from the PIT and is passed where the endpoint family requires it.
 3. Probe one low-risk read (`GET /locations/{location}`, else `POST /contacts/search` with `pageLimit` 1) through the helper and classify the result before changing credentials or code.
 4. Do not retrieve the PIT for visual inspection, even in masked form.
+
+### Helper messages before any request
+
+The helpers print one of these messages (in ASCII, the same on Windows and macOS apart from the launcher name) and stop without calling the API. Recognise them by the code at the start, then explain the situation to the user in plain Italian.
+
+| Code | Meaning | What to do |
+| --- | --- | --- |
+| `[futuria-crm:credenziali-mancanti]` | Neither the private key nor the account id is stored (on Linux: environment variables not set) | Run the launcher (`launch-credential-setup.ps1` or `.sh`); on Linux ask the user to set the variables personally |
+| `[futuria-crm:id-mancante]` | Private key present, account id missing | Run the launcher once and ask the user to connect the account again; expected once after updating to 1.3.3 for users of the desktop app |
+| `[futuria-crm:chiave-mancante]` | Account id present, private key missing | Run the launcher once |
+| `[futuria-crm:chiave-non-leggibile]` | Windows: the key file exists but cannot be decrypted for this Windows user | Run the launcher and connect again; do not delete files by hand |
+| `[futuria-crm:portachiavi-non-accessibile]` | macOS: the Keychain is locked or blocked by the agent's sandbox | Ask the user to unlock it, or run the command outside the sandbox; do not reopen the configurator |
+| `[futuria-crm:cartella-non-valida]` | `USERPROFILE` (Windows) or `HOME` (macOS) is empty or not an absolute path | Run the helper from a normal user session; do not set the variable on the user's behalf |
+| `[futuria-crm:usa-powershell]` | A `.sh` helper was started from Git Bash on Windows | Use the `.ps1` helper with PowerShell |
+| `[futuria-crm:copia-rimandata]` | Warning only: the files of the previous version could not be copied into the new folder, so they were read read-only | No action; the copy is retried on the next run |
 
 ## Error matrix
 
 ### 401 Unauthorized
 - Token invalid, expired, revoked, or wrong scope.
 - Confirm the helper is using the expected protected credential source.
+- If the user has just connected the account again, check that every agent on the computer runs plugin 1.3.3 or later: an installation still on 1.3.2 writes into the old folder, so the updated one may keep using the previous key or account id. The status check reports this case.
 - Do not assume the requested object is missing until the token is verified.
 - User-facing: "errore di autorizzazione sul tuo account Futuria CRM" — never name the host.
 

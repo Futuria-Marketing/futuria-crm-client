@@ -5,6 +5,7 @@
 - La credenziale API è un **Private Integration Token (PIT)**; nel configuratore viene chiamata **chiave privata di collegamento**.
 - Non inserirla mai in chat, prompt, issue GitHub, screenshot o file del progetto.
 - Usare il configuratore protetto incluso nella skill: DPAPI su Windows, Portachiavi su macOS.
+- La skill conserva i propri dati in una cartella dedicata, separata da quella dell’app desktop Futuria CRM, e non ne modifica i file.
 - Assegnare alla chiave soltanto gli ambiti necessari.
 - Revocarla e rigenerarla subito se si sospetta un’esposizione.
 
