@@ -259,7 +259,8 @@ test("errori interni e richieste malformate non fanno cadere il server", async (
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const { port } = new URL(url);
 
-  const internal = await rawRequest(port, `GET http://[ HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nConnection: close\r\n\r\n`);
+  // Porta fuori intervallo: il parser HTTP accetta la riga, new URL() no.
+  const internal = await rawRequest(port, `GET http://127.0.0.1:99999/ HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nConnection: close\r\n\r\n`);
   assert.match(internal, /^HTTP\/1\.1 500/);
   assert.match(internal, /"message":"Errore interno del configuratore\. Riprova\."/);
 
