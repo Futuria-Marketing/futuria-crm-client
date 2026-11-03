@@ -211,18 +211,6 @@ h1 {
   padding-right: 92px;
 }
 
-/* Campo di testo mascherato al posto di type="password": il browser non lo
-   tratta come una password e non propone di salvare la chiave nel suo
-   gestore. Supportato da Chrome, Edge, Safari e Firefox 114 o successivo; dove
-   manca, app.js nasconde «Mostra» e il valore resta leggibile. */
-.masked-input {
-  -webkit-text-security: disc;
-}
-
-.masked-input.is-visible {
-  -webkit-text-security: none;
-}
-
 .visibility-toggle {
   position: absolute;
   top: 50%;

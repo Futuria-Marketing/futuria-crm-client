@@ -257,16 +257,16 @@ test("la pagina è solo il modulo, con un pulsante di aiuto accanto a ogni campo
   assert.doesNotMatch(html, /guide-panel|guide-accordion|<details/);
   assert.match(html, /<form id="credential-form" method="post" novalidate>/);
 
-  // Il campo della chiave non è un campo password: il browser non lo legge
-  // come una credenziale e non propone di salvarlo nel suo gestore.
+  // Il campo della chiave è un campo password: nascosto in ogni browser e
+  // non letto ad alta voce dai lettori di schermo. Nessun mascheramento CSS.
   const keyField = html.match(/<input\s+id="private-key"[^>]*>/)?.[0];
   assert.ok(keyField, "campo della chiave presente");
-  assert.doesNotMatch(keyField, /type="password"/);
-  assert.doesNotMatch(keyField, /new-password|current-password/);
-  assert.match(keyField, /type="text"/);
-  assert.match(keyField, /class="masked-input"/);
-  assert.match(keyField, /autocomplete="off"/);
-  assert.doesNotMatch(html, /type="password"/);
+  assert.match(keyField, /type="password"/);
+  assert.match(keyField, /autocomplete="new-password"/);
+  assert.match(keyField, /autocapitalize="none"/);
+  assert.match(keyField, /spellcheck="false"/);
+  assert.doesNotMatch(keyField, /masked-input|type="text"/);
+  assert.equal((html.match(/type="password"/g) ?? []).length, 1);
   // Senza attributo name un eventuale invio nativo non porta i valori.
   const accountField = html.match(/<input\s+id="account-link"[^>]*>/)?.[0];
   assert.ok(accountField, "campo del link presente");
@@ -320,9 +320,8 @@ test("la pagina è solo il modulo, con un pulsante di aiuto accanto a ogni campo
   assert.doesNotMatch(styles, /\.guide-panel|\.accordion|\.video-guide/);
   assert.match(styles, /\.guide-dialog::backdrop/);
   assert.match(styles, /\.dialog-body \{[^}]*overflow-y: auto/);
-  // Mascheramento del campo chiave via CSS.
-  assert.match(styles, /\.masked-input \{\s*-webkit-text-security: disc;\s*\}/);
-  assert.match(styles, /\.masked-input\.is-visible \{\s*-webkit-text-security: none;\s*\}/);
+  // Nessun mascheramento CSS: lo fa il campo password.
+  assert.doesNotMatch(styles, /-webkit-text-security|\.masked-input/);
   // Focus da tastiera ben visibile su pulsanti di aiuto e chiusura.
   const focusRule = styles.match(/\.help-button:focus-visible,[\s\S]*?\{([^}]*)\}/)?.[1] ?? "";
   assert.match(focusRule, /outline: 3px solid var\(--green-dark\);/);
@@ -352,11 +351,11 @@ test("lo script della pagina carica il video solo nella finestra della chiave", 
   // meno recenti, che altrimenti non eseguirebbero lo script.
   assert.doesNotMatch(app, /\?\./);
 
-  // Il campo della chiave non diventa mai type="password".
-  assert.doesNotMatch(app, /keyInput\.type\s*=/);
-  assert.doesNotMatch(app, /\.type\s*=\s*(?:showing \? )?"password"/);
-  assert.match(app, /keyInput\.classList\.toggle\("is-visible"\)/);
-  assert.match(app, /CSS\.supports\("-webkit-text-security", "disc"\)/);
+  // «Mostra» alterna il tipo del campo tra password e text e resta visibile
+  // in ogni browser.
+  assert.match(app, /keyInput\.type = showing \? "password" : "text";/);
+  assert.doesNotMatch(app, /visibilityToggle\.hidden/);
+  assert.doesNotMatch(app, /CSS\.supports|classList\.toggle\("is-visible"\)/);
 
   // Battito solo con la scheda in vista.
   assert.match(app, /fetch\("status"/);

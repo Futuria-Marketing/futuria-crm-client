@@ -260,18 +260,16 @@
 
   accountInput.addEventListener("input", updateAccountPreview);
 
-  // La chiave sta in un campo di testo mascherato dal CSS, mai type="password":
-  // così il browser non la tratta come una password e non propone di salvarla
-  // nel suo gestore. Dove il mascheramento non è supportato il valore resta
-  // leggibile e «Mostra» non serve.
-  const canMask = typeof CSS !== "undefined" && typeof CSS.supports === "function"
-    && CSS.supports("-webkit-text-security", "disc");
-  if (!canMask) visibilityToggle.hidden = true;
-
+  // La chiave resta in un campo type="password": è nascosta in ogni browser e
+  // i lettori di schermo non la leggono ad alta voce. Un campo di testo
+  // mascherato via CSS (-webkit-text-security) la lascerebbe leggibile dove
+  // il CSS non è supportato. Il browser può proporre di salvarla nel suo
+  // gestore delle password: è il male minore. «Mostra» cambia solo il tipo.
   visibilityToggle.addEventListener("click", () => {
-    const showing = keyInput.classList.toggle("is-visible");
-    visibilityToggle.textContent = showing ? "Nascondi" : "Mostra";
-    visibilityToggle.setAttribute("aria-pressed", String(showing));
+    const showing = keyInput.type === "text";
+    keyInput.type = showing ? "password" : "text";
+    visibilityToggle.textContent = showing ? "Mostra" : "Nascondi";
+    visibilityToggle.setAttribute("aria-pressed", String(!showing));
     keyInput.focus();
   });
 
