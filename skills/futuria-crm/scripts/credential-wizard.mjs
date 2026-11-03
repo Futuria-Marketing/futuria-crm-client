@@ -356,8 +356,15 @@ export async function storeMacCredential(location, privateKey, {
   );
 
   try {
+    // Prima si toglie l’ID account precedente, poi si salva la chiave e per
+    // ultimo il nuovo ID: un’interruzione lascia «chiave presente, ID
+    // mancante» invece della chiave nuova accanto all’ID di prima.
+    try {
+      unlinkSync(configPath);
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
     await writeKeychain(privateKey);
-    // renameSync sostituisce in modo atomico una configurazione precedente.
     renameSync(tempPath, configPath);
     chmodSync(configPath, 0o600);
   } catch (error) {

@@ -227,41 +227,71 @@ function Move-FuturiaNoOverwrite {
     }
 }
 
-function Invoke-FuturiaMigration {
+function Test-FuturiaSameCredential {
     param($Paths)
+    # Vero se il credential.xml della cartella nuova e' la copia byte per byte
+    # di quello della skill nella cartella vecchia. Succede solo dopo la copia
+    # (Copy-Item), mai dopo un nuovo collegamento: Export-Clixml con DPAPI
+    # produce ogni volta un file diverso. Non decifra nulla.
+    try {
+        if (-not $Paths.LegacyCredentialPath) { return $false }
+        if (-not (Test-FuturiaPlainFile $Paths.CredentialPath $FuturiaCredentialMaxBytes)) { return $false }
+        if (-not (Test-FuturiaCredentialFile $Paths.LegacyCredentialPath)) { return $false }
+        $newItem = Get-Item -LiteralPath $Paths.CredentialPath -Force -ErrorAction Stop
+        $legacyItem = Get-Item -LiteralPath $Paths.LegacyCredentialPath -Force -ErrorAction Stop
+        if ($newItem.Length -ne $legacyItem.Length) { return $false }
+        $newText = Get-Content -LiteralPath $Paths.CredentialPath -Raw -ErrorAction Stop
+        $legacyText = Get-Content -LiteralPath $Paths.LegacyCredentialPath -Raw -ErrorAction Stop
+        if ($null -eq $newText -or $null -eq $legacyText) { return $false }
+        return ([string]$newText -ceq [string]$legacyText)
+    } catch {
+        return $false
+    }
+}
+
+function Invoke-FuturiaMigration {
+    param($Paths, [switch]$ConfigOnly)
     # Copia (mai sposta) i file della skill dalla cartella usata fino alla
-    # 1.3.2. Va chiamata solo quando la cartella nuova non contiene ne' la
-    # chiave ne' la configurazione. La cartella vecchia resta com'e': nessuna
+    # 1.3.2. Senza -ConfigOnly va chiamata quando la cartella nuova non
+    # contiene ne' la chiave ne' la configurazione; con -ConfigOnly quando
+    # contiene gia' la copia della vecchia chiave ma non la configurazione
+    # (copia rimasta a meta' o in corso in un altro processo): si completa.
+    # Regole: nulla si copia senza una vecchia chiave valida, cosi' dopo una
+    # rimozione la vecchia copia dell'ID account non torna; la configurazione
+    # va solo accanto alla stessa chiave della versione precedente, mai
+    # accanto a una chiave diversa. La cartella vecchia resta com'e': nessuna
     # scrittura, nessuna cancellazione, nessun file temporaneo.
+    # Status: none, copied (con la configurazione), copied-key (solo la
+    # chiave: nella cartella vecchia non c'era una configurazione della skill)
+    # oppure fallback (copia non riuscita, file vecchi in sola lettura).
     $result = @{ Status = 'none'; LegacyCredentialOk = $false; LegacyConfig = $null }
     if (-not $Paths.LegacyDir) { return $result }
     if (-not (Test-Path -LiteralPath $Paths.LegacyDir -PathType Container)) { return $result }
 
+    $result.LegacyConfig = ConvertFrom-FuturiaConfigText (Read-FuturiaSmallText $Paths.LegacyConfigPath $FuturiaConfigMaxBytes)
+    if ($ConfigOnly -and $null -eq $result.LegacyConfig) { return $result }
     if (Test-FuturiaCredentialFile $Paths.LegacyCredentialPath) {
         $legacyCredential = Read-FuturiaCredential $Paths.LegacyCredentialPath
         $result.LegacyCredentialOk = ($legacyCredential.State -ceq 'presente')
         $legacyCredential = $null
     }
-    $result.LegacyConfig = ConvertFrom-FuturiaConfigText (Read-FuturiaSmallText $Paths.LegacyConfigPath $FuturiaConfigMaxBytes)
-    if (-not $result.LegacyCredentialOk -and $null -eq $result.LegacyConfig) { return $result }
+    if (-not $result.LegacyCredentialOk) { return $result }
 
     $credentialTemp = $null
     $configTemp = $null
     try {
         New-Item -ItemType Directory -Path $Paths.Dir -Force -ErrorAction Stop | Out-Null
         # Prima la chiave, per ultima la configurazione.
-        if ($result.LegacyCredentialOk) {
+        if (-not $ConfigOnly) {
             $credentialTemp = New-FuturiaTempPath $Paths.Dir 'credential'
             Copy-Item -LiteralPath $Paths.LegacyCredentialPath -Destination $credentialTemp -ErrorAction Stop
             if ((Read-FuturiaCredential $credentialTemp).State -cne 'presente') {
                 throw 'copia della chiave non leggibile'
             }
-            if (-not (Move-FuturiaNoOverwrite $credentialTemp $Paths.CredentialPath)) {
-                # Un altro processo ha gia' copiato: va bene se la sua copia e' valida.
-                if ((Read-FuturiaCredential $Paths.CredentialPath).State -cne 'presente') {
-                    throw 'chiave gia'' presente ma non valida'
-                }
-            }
+            # Se un altro processo ha gia' copiato, la sua copia e' identica:
+            # lo controlla Test-FuturiaSameCredential prima della configurazione.
+            $null = Move-FuturiaNoOverwrite $credentialTemp $Paths.CredentialPath
+            $result.Status = 'copied-key'
         }
         if ($null -ne $result.LegacyConfig) {
             $configTemp = New-FuturiaTempPath $Paths.Dir 'config'
@@ -270,13 +300,19 @@ function Invoke-FuturiaMigration {
             if ($null -eq (ConvertFrom-FuturiaConfigText (Read-FuturiaSmallText $configTemp $FuturiaConfigMaxBytes))) {
                 throw 'copia della configurazione non valida'
             }
+            if (-not (Test-FuturiaSameCredential $Paths)) {
+                # Nel frattempo e' stato salvato un nuovo collegamento: la
+                # vecchia configurazione non va accanto alla nuova chiave.
+                $result.Status = 'none'
+                return $result
+            }
             if (-not (Move-FuturiaNoOverwrite $configTemp $Paths.ConfigPath)) {
                 if ($null -eq (ConvertFrom-FuturiaConfigText (Read-FuturiaSmallText $Paths.ConfigPath $FuturiaConfigMaxBytes))) {
                     throw 'configurazione gia'' presente ma non valida'
                 }
             }
+            $result.Status = 'copied'
         }
-        $result.Status = 'copied'
     } catch {
         # Permessi, sandbox, antivirus o disco pieno: la chiamata continua in
         # sola lettura con i file della versione precedente.
@@ -294,9 +330,12 @@ function Invoke-FuturiaMigration {
 
 function Resolve-FuturiaState {
     # Stato della skill per Status e crm-api: chiave e ID account dalla cartella
-    # nuova; se la cartella nuova non contiene ne' l'una ne' l'altro, copia
+    # nuova. Se la cartella nuova non contiene ne' l'una ne' l'altro, copia
     # prima i file della versione precedente (o li legge in sola lettura se la
-    # copia non riesce). Non stampa mai valori.
+    # copia non riesce). Se contiene soltanto la copia identica della vecchia
+    # chiave, completa la copia della configurazione: una copia interrotta o
+    # in corso in un altro processo non fa chiedere di ricollegare l'account.
+    # Non stampa mai valori.
     $paths = Get-FuturiaStatePaths
     Remove-FuturiaStaleTemps $paths.Dir
     $state = @{
@@ -309,10 +348,16 @@ function Resolve-FuturiaState {
     $credentialPath = $paths.CredentialPath
     $hasNewCredential = Test-Path -LiteralPath $paths.CredentialPath
     $hasNewConfig = Test-Path -LiteralPath $paths.ConfigPath
+    $mode = $null
     if (-not $hasNewCredential -and -not $hasNewConfig) {
+        $mode = 'all'
+    } elseif ($hasNewCredential -and -not $hasNewConfig -and (Test-FuturiaSameCredential $paths)) {
+        $mode = 'config'
+    }
+    if ($mode) {
         $migration = $null
         try {
-            $migration = Invoke-FuturiaMigration $paths
+            $migration = Invoke-FuturiaMigration $paths -ConfigOnly:($mode -ceq 'config')
         } catch {
             $migration = @{ Status = 'none'; LegacyCredentialOk = $false; LegacyConfig = $null }
         }

@@ -17,7 +17,7 @@ Preferred storage:
 - macOS: private key in macOS Keychain; account id in `~/Library/Application Support/com.futuriamarketing.futuria-crm-skill/config.json`.
 - Linux or automated environments: environment variables as an explicit fallback.
 
-The skill folder is separate from the Futuria CRM desktop app, whose folder (`%APPDATA%\Futuria CRM`, `~/Library/Application Support/Futuria CRM`) versions up to 1.3.2 also used. On the first status check or API call after an update, the helpers copy the skill's own files from that old folder into the new one and never modify the app's files. If the copy is not possible (for example inside a sandbox), they read the old files read-only and retry next time; this needs no action from you or the user.
+The skill folder is separate from the Futuria CRM desktop app, whose folder (`%APPDATA%\Futuria CRM`, `~/Library/Application Support/Futuria CRM`) versions up to 1.3.2 also used. On the first status check or API call after an update, the helpers copy the skill's own files from that old folder into the new one and never modify the app's files. If the copy is not possible (for example inside a sandbox), they read the old files read-only and retry next time; a copy interrupted halfway is completed on the next run. This needs no action from you or the user.
 
 Never ask the user to paste the private key in chat, a prompt, a shell command, a file in the workspace, or an issue. Never retrieve it merely to inspect or mask it.
 
@@ -123,7 +123,9 @@ macOS:
 bash "<skill-dir>/scripts/setup-credentials.sh" remove
 ```
 
-This removes the skill folder and the copies left by versions up to 1.3.2 in the desktop app's folder, recognised by their structure; it never removes the desktop app's own files or that folder. If the desktop app is open, the old copy of the account id stays until the app is closed and the removal is repeated (the output says so). If the user also uses the desktop app, the account id may remain inside the app's own configuration file, which the skill does not modify.
+This removes the copies left by versions up to 1.3.2 in the desktop app's folder, recognised by their structure, and then the skill folder; it never removes the desktop app's own files or that folder. If the desktop app is open, the old copy of the account id stays until the app is closed and the removal is repeated (the output says so); the helpers do not copy it back in the meantime. If the user also uses the desktop app, the account id may remain inside the app's own configuration file, which the skill does not modify.
+
+If the output starts with `[futuria-crm:rimozione-incompleta]`, some files could not be removed (a program is using them, or on macOS the Keychain is locked). When an old copy of the private key or the Keychain entry could not be removed, the skill folder is left as it was, so the state does not change half-way. Ask the user to close the programs or unlock the Keychain, then run the removal again.
 
 This removes only the local copy. Revoking the private key itself is a separate action in the user's Futuria CRM account.
 

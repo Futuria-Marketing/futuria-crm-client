@@ -164,7 +164,9 @@ futuria_clean_stale_temps() {
 }
 
 # Copia (mai sposta) la configurazione della versione precedente nella
-# cartella nuova, solo se la cartella nuova non ha ancora una configurazione.
+# cartella nuova, solo se la cartella nuova non ha ancora una configurazione
+# e la voce del Portachiavi c'e' ancora: dopo una rimozione la vecchia copia
+# dell'ID account (rimasta perche' l'app desktop era aperta) non torna.
 # Non restituisce mai errore: imposta FUTURIA_MIGRATION a none, copied o
 # fallback e, nel caso fallback, FUTURIA_FALLBACK_LOCATION.
 futuria_migrate_legacy() {
@@ -174,6 +176,8 @@ futuria_migrate_legacy() {
   if [[ -e "${FUTURIA_CONFIG_FILE}" || -L "${FUTURIA_CONFIG_FILE}" ]]; then return 0; fi
   if [[ ! -d "${FUTURIA_LEGACY_DIR}" ]]; then return 0; fi
   if ! futuria_classify_config "${FUTURIA_LEGACY_CONFIG_FILE}"; then return 0; fi
+  # Con il Portachiavi bloccato (non accessibile) la copia si fa comunque.
+  if [[ "$(futuria_keychain_state)" == "mancante" ]]; then return 0; fi
   location="${FUTURIA_CFG_LOCATION}"
   updated="${FUTURIA_CFG_UPDATED_AT}"
 

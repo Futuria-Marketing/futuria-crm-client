@@ -7,7 +7,7 @@ The direct API is the **primary channel** for operating the user's Futuria CRM a
 ## Secure request rules
 
 - Base URL: `https://services.leadconnectorhq.com` — every path in the area references is relative to it.
-- Use the bundled helper for every API request. It loads the PIT internally from Windows DPAPI, macOS Keychain, or the environment fallback, reads the account id from the skill's own folder (never from the Futuria CRM desktop app's folder), and accepts only relative paths on the fixed Futuria CRM API host. When something is missing it stops before any request with one of the coded messages below.
+- Use the bundled helper for every API request. It loads the PIT internally from Windows DPAPI, macOS Keychain, or the environment fallback, reads the account id from the skill's own folder, and accepts only relative paths on the fixed Futuria CRM API host. Only after an update, while the skill's files from versions up to 1.3.2 cannot be copied into that folder (for example inside a sandbox), it reads those files read-only from the old folder shared with the desktop app; it never uses the app's own files. When something is missing it stops before any request with one of the coded messages below.
 - The helper adds the Authorization, Version and Accept headers. It adds the JSON content type on writes. It defaults to the validated V2 date header used by the endpoint tables; pass `-Version v3` on Windows or set `FUTURIA_CRM_API_VERSION=v3` on macOS only for an endpoint whose reference explicitly requires V3.
 - Never construct or display a raw Authorization header in the conversation.
 
@@ -54,7 +54,7 @@ Other validated quirks:
 
 ## Credential and account diagnostics
 
-1. Run the protected setup script with `-Status` on Windows or `status` on macOS. It never prints values: it checks that the private key can really be read (`presente`, `mancante`, `non leggibile` on Windows, `non accessibile` on macOS) and that the stored account id is valid, says when the account must be connected again, and exits with 0 only when both are valid.
+1. Run the protected setup script with `-Status` on Windows or `status` on macOS. It never prints values: on Windows it checks that the private key can really be decrypted for this user, on macOS that the Keychain entry exists, without reading it (`presente`, `mancante`, `non leggibile` on Windows, `non accessibile` on macOS); it checks that the stored account id is valid, says when the account must be connected again (`Serve ricollegare l'account`), and exits with 0 only when both are present.
 2. Confirm that the account id is separate from the PIT and is passed where the endpoint family requires it.
 3. Probe one low-risk read (`GET /locations/{location}`, else `POST /contacts/search` with `pageLimit` 1) through the helper and classify the result before changing credentials or code.
 4. Do not retrieve the PIT for visual inspection, even in masked form.
@@ -73,6 +73,7 @@ The helpers print one of these messages (in ASCII, the same on Windows and macOS
 | `[futuria-crm:cartella-non-valida]` | `USERPROFILE` (Windows) or `HOME` (macOS) is empty or not an absolute path | Run the helper from a normal user session; do not set the variable on the user's behalf |
 | `[futuria-crm:usa-powershell]` | A `.sh` helper was started from Git Bash on Windows | Use the `.ps1` helper with PowerShell |
 | `[futuria-crm:copia-rimandata]` | Warning only: the files of the previous version could not be copied into the new folder, so they were read read-only | No action; the copy is retried on the next run |
+| `[futuria-crm:rimozione-incompleta]` | Printed by the removal (`-Remove` or `remove`), not by the API helper: some local files could not be removed (a program is using them), or on macOS the Keychain is locked | Ask the user to close the programs using the files or unlock the Keychain, then run the removal again |
 
 ## Error matrix
 

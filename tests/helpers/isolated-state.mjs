@@ -287,6 +287,7 @@ export function createFakeTools(state) {
       "    fi",
       '    exit "$rc" ;;',
       '  delete-generic-password) exit "${FAKE_SECURITY_DELETE_RC:-0}" ;;',
+      '  add-generic-password) exit "${FAKE_SECURITY_ADD_RC:-1}" ;;',
       "  *) exit 1 ;;",
       "esac",
       "",

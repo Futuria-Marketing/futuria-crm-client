@@ -67,7 +67,15 @@ case "${action}" in
   remove)
     failed=0
     kept_legacy=0
-    security delete-generic-password -a "${account}" -s "${service}" >/dev/null 2>&1 || true
+    delete_rc=0
+    security delete-generic-password -a "${account}" -s "${service}" >/dev/null 2>&1 || delete_rc=$?
+    # 44: la voce non c'era. Con un altro errore (Portachiavi bloccato o
+    # sandbox) i file restano com'erano: la rimozione incompleta non cambia lo
+    # stato e si puo' ripetere.
+    if (( delete_rc != 0 && delete_rc != 44 )); then
+      echo "[futuria-crm:rimozione-incompleta] Portachiavi non accessibile da questo processo: sbloccalo o esegui il comando fuori dalla sandbox, poi ripeti la rimozione."
+      exit 1
+    fi
 
     # Cartella della skill: soltanto i nomi noti, poi la cartella se e' vuota.
     if [[ -e "${config_file}" || -L "${config_file}" ]]; then
@@ -132,6 +140,22 @@ if [[ ! "${location}" =~ ^[A-Za-z0-9_-]{6,128}$ ]]; then
   exit 2
 fi
 
+# Si scrive soltanto nella cartella della skill, mai in quella dell'app
+# desktop. La nuova configurazione si prepara in un temporaneo prima di
+# chiedere la chiave; subito prima si toglie l'ID account precedente, cosi'
+# un'interruzione lascia "chiave presente, ID mancante" invece della chiave
+# nuova accanto all'ID di prima. Alla fine una rinomina atomica.
+if ! temp_name="$(futuria_temp_name)"; then
+  echo "Impossibile preparare il salvataggio della configurazione." >&2
+  exit 2
+fi
+( umask 077 && mkdir -p -- "${config_dir}" )
+chmod 700 -- "${config_dir}"
+temp_file="${config_dir}/${temp_name}"
+trap 'rm -f -- "${temp_file}" 2>/dev/null || true' EXIT
+( umask 077 && futuria_config_text "${location}" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "${temp_file}" )
+rm -f -- "${config_file}"
+
 echo "Il Portachiavi chiederà ora il Private Integration Token (PIT) con input nascosto. Incollalo e premi Invio."
 # Con -w senza valore, `security` legge il segreto direttamente dal terminale:
 # durante l'inserimento il PIT non diventa un argomento di processo.
@@ -146,17 +170,6 @@ if [[ ! "${stored_pit}" =~ ^pit-[A-Za-z0-9._-]+$ ]] || (( ${#stored_pit} < 10 ||
 fi
 unset stored_pit
 
-# Si scrive soltanto nella cartella della skill, mai in quella dell'app
-# desktop: temporaneo e rinomina atomica, che sostituisce la versione precedente.
-if ! temp_name="$(futuria_temp_name)"; then
-  echo "Impossibile preparare il salvataggio della configurazione." >&2
-  exit 2
-fi
-( umask 077 && mkdir -p -- "${config_dir}" )
-chmod 700 -- "${config_dir}"
-temp_file="${config_dir}/${temp_name}"
-trap 'rm -f -- "${temp_file}" 2>/dev/null || true' EXIT
-( umask 077 && futuria_config_text "${location}" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "${temp_file}" )
 mv -f -- "${temp_file}" "${config_file}"
 chmod 600 -- "${config_file}"
 

@@ -250,6 +250,17 @@ def check_state_dir():
                 if any(pat.search(line) for pat in LEGACY_PATH_PATS):
                     ERRORS.append(f"[state] {rel(p)}:{i} usa la cartella dell'app desktop Futuria CRM")
 
+    # 2b. Nel configuratore la cartella della versione precedente serve solo a
+    # legacyStateDirectory (riconoscimento dei file), mai a un salvataggio; il
+    # configuratore macOS salva per impostazione nella cartella della skill.
+    legacy_fn = re.search(r"export function legacyStateDirectory\b.*?\n\}\n", mjs, re.DOTALL)
+    outside = mjs.replace(legacy_fn.group(0), "") if legacy_fn else mjs
+    outside_uses = re.findall(r"\b(?:LEGACY_STATE_DIR_NAME|legacyStateDirectory)\b", outside)
+    if not legacy_fn or outside_uses != ["LEGACY_STATE_DIR_NAME"]:
+        ERRORS.append("[state] credential-wizard.mjs usa la cartella della versione precedente fuori da legacyStateDirectory")
+    if not re.search(r'configDir\s*=\s*stateDirectory\(\{\s*platform:\s*"darwin"', mjs):
+        ERRORS.append("[state] storeMacCredential non salva per impostazione nella cartella della skill")
+
     # 3. Codifiche dei PowerShell: ASCII senza BOM dove richiesto, BOM nel setup.
     for name in ASCII_ONLY:
         path = SCRIPTS_DIR / name

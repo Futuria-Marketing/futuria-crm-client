@@ -14,6 +14,7 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -28,6 +29,7 @@ import {
 } from "../skills/futuria-crm/scripts/credential-wizard.mjs";
 import { APP_STORE_TEXT, CONFIG_CASES, DEMO_ID } from "./fixtures/state-config-cases.mjs";
 import {
+  assertIsolatedPath,
   assertPowerShellChildIsolated,
   bashExecutable,
   createFakeTools,
@@ -274,15 +276,31 @@ test("il configuratore macOS scrive solo nella cartella della skill", async (t) 
     assert.equal(statSync(join(state.mac.stateDir, "config.json")).mode & 0o777, 0o600);
   }
 
-  // Un secondo collegamento sostituisce il primo.
+  // Un secondo collegamento sostituisce il primo. Mentre la chiave cambia
+  // l’ID precedente non c’è già più.
+  const configPath = join(state.mac.stateDir, "config.json");
+  let idDuringKeychain = null;
   await storeMacCredential("otherAccount123456", FAKE_PIT, {
     configDir: state.mac.stateDir,
-    writeKeychain: async () => {},
+    writeKeychain: async () => { idDuringKeychain = existsSync(configPath); },
   });
+  assert.equal(idDuringKeychain, false);
   assert.equal(
-    classifyLegacyConfig(readFileSync(join(state.mac.stateDir, "config.json")), { platform: "darwin" })?.location,
+    classifyLegacyConfig(readFileSync(configPath), { platform: "darwin" })?.location,
     "otherAccount123456",
   );
+
+  // Un ricollegamento interrotto mentre si salva la chiave lascia «chiave
+  // presente, ID mancante», mai la chiave nuova con l’ID di prima.
+  await assert.rejects(
+    storeMacCredential("thirdAccount123456", FAKE_PIT, {
+      configDir: state.mac.stateDir,
+      writeKeychain: async () => { throw new Error("Portachiavi finto interrotto"); },
+    }),
+    /Portachiavi finto interrotto/,
+  );
+  assert.equal(existsSync(configPath), false);
+  assert.deepEqual(listTemps(state.mac.stateDir), []);
 
   // Se il Portachiavi fallisce non resta nessuna configurazione nuova né temporaneo.
   const failing = join(state.root, "cartella-fallita");
@@ -295,6 +313,29 @@ test("il configuratore macOS scrive solo nella cartella della skill", async (t) 
   );
   assert.equal(existsSync(join(failing, "config.json")), false);
   assert.deepEqual(listTemps(failing), []);
+  assert.deepEqual(snapshot(state.mac.legacyDir), legacyBefore);
+});
+
+// Su Windows HOME non può essere un percorso POSIX assoluto dentro la cartella
+// temporanea: il test gira su macOS e Linux (CI).
+test("il configuratore macOS salva per impostazione nella cartella della skill", { skip: isWindows }, async (t) => {
+  const state = createIsolatedState(t);
+  const savedHome = process.env.HOME;
+  process.env.HOME = state.profile;
+  t.after(() => {
+    if (savedHome === undefined) delete process.env.HOME;
+    else process.env.HOME = savedHome;
+  });
+  const expected = stateDirectory({ platform: "darwin", env: process.env, home: homedir() });
+  assertIsolatedPath(expected, state.root, "cartella predefinita del configuratore");
+  assert.equal(expected, state.mac.stateDir);
+  mkdirSync(state.mac.legacyDir, { recursive: true });
+  writeFileSync(join(state.mac.legacyDir, "config.json"), APP_STORE_TEXT);
+  const legacyBefore = snapshot(state.mac.legacyDir);
+
+  await storeMacCredential(DEMO_ID, FAKE_PIT, { writeKeychain: async () => {} });
+  const config = readFileSync(join(state.mac.stateDir, "config.json"), "utf8");
+  assert.equal(classifyLegacyConfig(config, { platform: "darwin" })?.location, DEMO_ID);
   assert.deepEqual(snapshot(state.mac.legacyDir), legacyBefore);
 });
 
@@ -373,13 +414,25 @@ test("Windows: con lo store dell’app e la chiave della skill copia solo la chi
   assert.deepEqual(lines(status.stdout), [
     "Chiave privata protetta: presente",
     "ID account: mancante",
-    "Configurazione della versione precedente copiata nella nuova cartella.",
+    "Chiave privata della versione precedente copiata nella nuova cartella, senza ID account.",
     "Serve ricollegare l'account: apri di nuovo il configuratore.",
   ]);
   assert.ok(existsSync(newFiles(state).credential));
   assert.equal(existsSync(newFiles(state).config), false);
   assert.deepEqual(listTemps(state.windows.stateDir), []);
   // Lo store dell’app resta identico: contenuto, data e permessi.
+  assert.deepEqual(snapshot(state.windows.legacyDir), before);
+
+  // Le chiamate successive non copiano lo store dell’app e non cambiano nulla.
+  const afterCopy = snapshot(state.windows.stateDir);
+  const again = windowsStatus(state);
+  assert.equal(again.status, 1);
+  assert.deepEqual(lines(again.stdout), [
+    "Chiave privata protetta: presente",
+    "ID account: mancante",
+    "Serve ricollegare l'account: apri di nuovo il configuratore.",
+  ]);
+  assert.deepEqual(snapshot(state.windows.stateDir), afterCopy);
   assert.deepEqual(snapshot(state.windows.legacyDir), before);
 });
 
@@ -466,6 +519,106 @@ test("Windows: con la chiave nuova presente la vecchia cartella non si usa più"
     "Serve ricollegare l'account: apri di nuovo il configuratore.",
   ]);
   assert.equal(existsSync(newFiles(state).config), false);
+  assert.deepEqual(snapshot(state.windows.legacyDir), before);
+});
+
+// Set-Content sostituito solo dentro il processo di prova, dopo il
+// dot-sourcing: simula il guasto durante la copia della configurazione.
+function brokenSetContent(body) {
+  return `function Set-Content { [CmdletBinding()] param($LiteralPath, $Value, $Encoding, [switch]$NoNewline) ${body} }`;
+}
+
+test("Windows: una copia rimasta a metà si completa alla chiamata successiva", { skip: !isWindows }, (t) => {
+  const failures = [
+    // Il salvataggio della configurazione fallisce: questa chiamata usa la
+    // versione precedente in sola lettura.
+    { name: "errore", body: "throw 'disco pieno simulato'", exit: 0, out: ["fallback", DEMO_ID] },
+    // Il processo si chiude subito dopo lo spostamento della chiave.
+    { name: "interruzione", body: "[Environment]::Exit(9)", exit: 9, out: [] },
+  ];
+  for (const failure of failures) {
+    const state = windowsState(t);
+    const legacy = legacyFiles(state);
+    writeCredentialFixture(state, legacy.credential);
+    writeFileSync(legacy.config, SKILL_CONFIG_WINDOWS);
+    const before = snapshot(state.windows.legacyDir);
+
+    const broken = runPowerShellCommand(state, [
+      ". $env:FUTURIA_TEST_STATE_SCRIPT",
+      brokenSetContent(failure.body),
+      "$s = Resolve-FuturiaState",
+      "Write-Output $s.Migration",
+      "Write-Output $s.Config.location",
+    ].join("; "));
+    assert.equal(broken.status, failure.exit, `${failure.name}: ${broken.stderr}`);
+    assert.deepEqual(lines(broken.stdout), failure.out, failure.name);
+    if (failure.name === "errore") assert.match(flat(broken.stderr), /\[futuria-crm:copia-rimandata\]/);
+    // Nella cartella nuova c’è soltanto la chiave.
+    assert.deepEqual(Object.keys(snapshot(state.windows.stateDir).entries), ["credential.xml"], failure.name);
+
+    // La chiamata successiva completa la copia invece di chiedere di ricollegare.
+    const status = windowsStatus(state);
+    assert.equal(status.status, 0, `${failure.name}: ${status.stdout}${status.stderr}`);
+    assert.deepEqual(lines(status.stdout), [
+      "Chiave privata protetta: presente",
+      "ID account: presente",
+      "Configurazione della versione precedente copiata nella nuova cartella.",
+    ], failure.name);
+    const copied = classifyLegacyConfig(readFileSync(newFiles(state).config), { platform: "win32" });
+    assert.equal(copied.location, DEMO_ID);
+    assert.equal(copied.updated_at, "2026-10-14T09:12:33.1234567Z");
+    assert.deepEqual(lines(windowsStatus(state).stdout), ["Chiave privata protetta: presente", "ID account: presente"]);
+    assert.deepEqual(listTemps(state.windows.stateDir), []);
+    assert.deepEqual(snapshot(state.windows.legacyDir), before);
+  }
+});
+
+test("Windows: uno Status durante la copia di un altro processo non chiede di ricollegare", { skip: !isWindows }, async (t) => {
+  const state = windowsState(t);
+  const legacy = legacyFiles(state);
+  writeCredentialFixture(state, legacy.credential);
+  writeFileSync(legacy.config, SKILL_CONFIG_WINDOWS);
+  const before = snapshot(state.windows.legacyDir);
+
+  // Il primo processo si ferma 4 secondi tra lo spostamento della chiave e
+  // quello della configurazione: la finestra resa larga apposta.
+  const slow = spawn(
+    POWERSHELL,
+    [
+      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
+      [
+        ". $env:FUTURIA_TEST_STATE_SCRIPT",
+        brokenSetContent("Start-Sleep -Seconds 4; Microsoft.PowerShell.Management\\Set-Content -LiteralPath $LiteralPath -Value $Value -Encoding $Encoding -NoNewline:$NoNewline -ErrorAction Stop"),
+        "$s = Resolve-FuturiaState",
+        "Write-Output $s.Migration",
+        "Write-Output $s.Config.location",
+      ].join("; "),
+    ],
+    { env: { ...state.env, FUTURIA_TEST_STATE_SCRIPT: join(SCRIPTS_DIR, "state-dir.ps1") }, windowsHide: true },
+  );
+  t.after(() => { try { slow.kill(); } catch { /* già chiuso */ } });
+  let slowOut = "";
+  slow.stdout.on("data", (chunk) => { slowOut += chunk; });
+  const closed = once(slow, "close");
+  const deadline = Date.now() + 30000;
+  while (!existsSync(newFiles(state).credential) && Date.now() < deadline) await sleep(50);
+  assert.ok(existsSync(newFiles(state).credential), "la chiave copiata dal primo processo");
+  assert.equal(existsSync(newFiles(state).config), false, "configurazione non ancora copiata");
+
+  const status = windowsStatus(state);
+  assert.equal(status.status, 0, status.stdout + status.stderr);
+  assert.deepEqual(lines(status.stdout), [
+    "Chiave privata protetta: presente",
+    "ID account: presente",
+    "Configurazione della versione precedente copiata nella nuova cartella.",
+  ]);
+
+  const [code] = await closed;
+  assert.equal(code, 0);
+  // Il primo processo trova la configurazione già al suo posto e la accetta.
+  assert.deepEqual(lines(slowOut), ["copied", DEMO_ID]);
+  assert.deepEqual(Object.keys(snapshot(state.windows.stateDir).entries), ["config.json", "credential.xml"]);
+  assert.deepEqual(lines(windowsStatus(state).stdout), ["Chiave privata protetta: presente", "ID account: presente"]);
   assert.deepEqual(snapshot(state.windows.legacyDir), before);
 });
 
@@ -578,6 +731,129 @@ test("Windows: -Remove toglie il vecchio config della skill solo con l’app des
   assert.match(kept.stdout, /Chiudi l'app desktop Futuria CRM e ripeti la rimozione/);
 });
 
+// Processo finto con il nome dell’app desktop, per tutta la durata del test.
+async function startFakeDesktopApp(t, state) {
+  const fakeApp = join(state.root, "Futuria CRM.exe");
+  copyFileSync(join(process.env.SystemRoot || "C:\\Windows", "System32", "PING.EXE"), fakeApp);
+  const app = spawn(fakeApp, ["-n", "60", "127.0.0.1"], { stdio: "ignore", windowsHide: true });
+  t.after(() => { try { app.kill(); } catch { /* già chiuso */ } });
+  await sleep(500);
+  return async () => {
+    app.kill();
+    await once(app, "exit");
+  };
+}
+
+// Un altro processo tiene aperto il file (in sola lettura, senza permettere la
+// cancellazione) finché la funzione restituita non lo chiude.
+async function holdFile(t, state, path, share = "Read") {
+  const holder = spawn(
+    POWERSHELL,
+    [
+      "-NoProfile", "-NonInteractive", "-Command",
+      "$f = [System.IO.File]::Open($env:FUTURIA_TEST_PATH, 'Open', 'Read', $env:FUTURIA_TEST_SHARE); Write-Output pronto; Start-Sleep -Seconds 60",
+    ],
+    { env: { ...state.env, FUTURIA_TEST_PATH: path, FUTURIA_TEST_SHARE: share }, windowsHide: true },
+  );
+  t.after(() => { try { holder.kill(); } catch { /* già chiuso */ } });
+  let out = "";
+  holder.stdout.on("data", (chunk) => { out += chunk; });
+  const deadline = Date.now() + 30000;
+  while (!out.includes("pronto") && Date.now() < deadline) await sleep(50);
+  assert.ok(out.includes("pronto"), "file tenuto aperto da un altro processo");
+  return async () => {
+    holder.kill();
+    await once(holder, "exit");
+  };
+}
+
+test("Windows: dopo la rimozione con l’app desktop aperta la vecchia copia dell’ID non torna", { skip: !isWindows }, async (t) => {
+  const state = windowsState(t);
+  const legacy = legacyFiles(state);
+  writeCredentialFixture(state, legacy.credential);
+  writeFileSync(legacy.config, SKILL_CONFIG_WINDOWS);
+  assert.equal(windowsStatus(state).status, 0);
+
+  const stopApp = await startFakeDesktopApp(t, state);
+  const removal = runPowerShellFile(state, "setup-credentials.ps1", ["-Remove"]);
+  await stopApp();
+  assert.equal(removal.status, 0, removal.stdout + removal.stderr);
+  assert.match(removal.stdout, /Chiudi l'app desktop Futuria CRM e ripeti la rimozione/);
+  assert.equal(existsSync(state.windows.stateDir), false);
+  assert.equal(existsSync(legacy.credential), false);
+  assert.ok(existsSync(legacy.config), "la vecchia copia dell’ID resta finché l’app è aperta");
+
+  // Senza la vecchia chiave la vecchia copia dell’ID non viene ricopiata.
+  for (let round = 0; round < 2; round += 1) {
+    const status = windowsStatus(state);
+    assert.equal(status.status, 1);
+    assert.deepEqual(lines(status.stdout), ["Chiave privata protetta: mancante", "ID account: mancante"]);
+    assert.equal(existsSync(state.windows.stateDir), false);
+  }
+});
+
+test("Windows: se la vecchia chiave non si può cancellare la rimozione è incompleta e non cambia nulla", { skip: !isWindows }, async (t) => {
+  const state = windowsState(t);
+  const legacy = legacyFiles(state);
+  writeCredentialFixture(state, legacy.credential);
+  writeFileSync(legacy.config, SKILL_CONFIG_WINDOWS);
+  assert.equal(windowsStatus(state).status, 0);
+  const newBefore = snapshot(state.windows.stateDir);
+
+  const release = await holdFile(t, state, legacy.credential);
+  const removal = runPowerShellFile(state, "setup-credentials.ps1", ["-Remove"]);
+  await release();
+  assert.equal(removal.status, 1, removal.stdout + removal.stderr);
+  assert.deepEqual(lines(removal.stdout), [
+    "[futuria-crm:rimozione-incompleta] Non e' stato possibile rimuovere tutti i file locali Futuria CRM: chiudi i programmi che li usano e ripeti la rimozione.",
+  ]);
+  assert.ok(existsSync(legacy.credential));
+  // La cartella nuova resta com’era: lo stato non cambia finché non si ripete.
+  assert.deepEqual(snapshot(state.windows.stateDir), newBefore);
+  assert.deepEqual(lines(windowsStatus(state).stdout), ["Chiave privata protetta: presente", "ID account: presente"]);
+
+  const again = runPowerShellFile(state, "setup-credentials.ps1", ["-Remove"]);
+  assert.equal(again.status, 0, again.stdout + again.stderr);
+  assert.equal(existsSync(legacy.credential), false);
+  assert.equal(existsSync(state.windows.stateDir), false);
+  const status = windowsStatus(state);
+  assert.equal(status.status, 1);
+  assert.deepEqual(lines(status.stdout), ["Chiave privata protetta: mancante", "ID account: mancante"]);
+  assert.equal(existsSync(state.windows.stateDir), false);
+});
+
+test("Windows: un ricollegamento interrotto non lascia la chiave nuova con l’ID di prima", { skip: !isWindows }, async (t) => {
+  const state = windowsState(t);
+  const first = runPowerShellFile(state, "setup-credentials.ps1", ["-FromStdin"], { input: `${DEMO_ID}\n${FAKE_PIT}\n` });
+  assert.equal(first.status, 0, first.stderr);
+  const keyIs = (pit) => lines(runPowerShellCommand(
+    state,
+    "$c = Import-Clixml -LiteralPath $env:FUTURIA_TEST_PATH; Write-Output ($c.GetNetworkCredential().Password -ceq $env:FUTURIA_TEST_PIT)",
+    { FUTURIA_TEST_PATH: newFiles(state).credential, FUTURIA_TEST_PIT: pit },
+  ).stdout);
+  const locationNow = () => classifyLegacyConfig(readFileSync(newFiles(state).config), { platform: "win32" })?.location;
+
+  // L’ID precedente non si può togliere (un altro processo lo tiene aperto):
+  // il salvataggio si ferma prima di toccare la chiave.
+  const secondKey = "pit-preview-second-1234567890";
+  const release = await holdFile(t, state, newFiles(state).config);
+  const blocked = runPowerShellFile(state, "setup-credentials.ps1", ["-FromStdin"], { input: `secondAccount98765\n${secondKey}\n` });
+  await release();
+  assert.notEqual(blocked.status, 0);
+  assert.equal((blocked.stdout + blocked.stderr).includes(secondKey), false);
+  const status = windowsStatus(state);
+  assert.equal(status.status, 0, status.stdout);
+  assert.equal(locationNow(), DEMO_ID);
+  assert.deepEqual(keyIs(FAKE_PIT), ["True"]);
+  assert.deepEqual(listTemps(state.windows.stateDir), []);
+
+  // Senza blocchi il ricollegamento riesce e sostituisce entrambi.
+  const second = runPowerShellFile(state, "setup-credentials.ps1", ["-FromStdin"], { input: `secondAccount98765\n${secondKey}\n` });
+  assert.equal(second.status, 0, second.stderr);
+  assert.equal(locationNow(), "secondAccount98765");
+  assert.deepEqual(keyIs(secondKey), ["True"]);
+});
+
 test("Windows: crm-api.ps1 distingue i casi senza fare richieste", { skip: !isWindows }, (t) => {
   const call = (state) => {
     const result = runPowerShellFile(state, "crm-api.ps1", ["-Method", "GET", "-Path", "/locations/{location}"]);
@@ -639,6 +915,11 @@ test("Windows: stato, copia e chiave funzionano in Constrained Language Mode", {
       "Write-Output ($s.Credential.GetNetworkCredential().Password -ceq $env:FUTURIA_TEST_PIT)",
       "& $env:FUTURIA_TEST_SETUP -Status",
       "Write-Output \"exit=$LASTEXITCODE\"",
+      // Copia rimasta a metà: la configurazione si completa anche qui.
+      "Remove-Item -LiteralPath $s.Paths.ConfigPath",
+      "$r = Resolve-FuturiaState",
+      "Write-Output $r.Migration",
+      "Write-Output $r.Config.location",
     ].join("; "),
     { FUTURIA_TEST_PIT: FAKE_PIT, FUTURIA_TEST_SETUP: join(SCRIPTS_DIR, "setup-credentials.ps1") },
   );
@@ -652,11 +933,13 @@ test("Windows: stato, copia e chiave funzionano in Constrained Language Mode", {
     "Chiave privata protetta: presente",
     "ID account: presente",
     "exit=0",
+    "copied",
+    DEMO_ID,
   ]);
   assert.deepEqual(listTemps(state.windows.stateDir), []);
 });
 
-test("Windows: quattro Status in parallelo copiano una sola volta senza errori", { skip: !isWindows }, async (t) => {
+test("Windows: quattro Status in parallelo al primo avvio riescono tutti senza errori", { skip: !isWindows }, async (t) => {
   const state = windowsState(t);
   const legacy = legacyFiles(state);
   writeCredentialFixture(state, legacy.credential);
@@ -935,6 +1218,73 @@ test("macOS: remove toglie il vecchio config della skill solo con l’app deskto
   assert.equal(closed.status, 0);
   assert.equal(existsSync(legacyConfig), false);
   assert.ok(existsSync(state.mac.legacyDir));
+});
+
+test("macOS: il collegamento nel terminale toglie l’ID precedente prima di salvare la chiave", { skip: !bashAvailable }, (t) => {
+  const state = createIsolatedState(t);
+  const tools = createFakeTools(state);
+  mkdirSync(state.mac.stateDir, { recursive: true });
+  const configPath = join(state.mac.stateDir, "config.json");
+  const setup = (env) => {
+    const result = runBash(state, tools, [toBashPath(join(SCRIPTS_DIR, "setup-credentials.sh"))], { env, input: "secondAccount98765\n" });
+    assert.doesNotMatch(result.stdout + result.stderr, /pit-preview/);
+    return result;
+  };
+
+  // Il Portachiavi non salva la chiave (finestra chiusa o Portachiavi
+  // bloccato): resta al massimo la chiave precedente senza ID account.
+  writeFileSync(configPath, SKILL_CONFIG_MAC);
+  const failed = setup({ FAKE_SECURITY_ADD_RC: "1" });
+  assert.notEqual(failed.status, 0);
+  assert.equal(existsSync(configPath), false);
+  assert.deepEqual(listTemps(state.mac.stateDir), []);
+
+  // Il collegamento riuscito scrive il nuovo ID.
+  writeFileSync(configPath, SKILL_CONFIG_MAC);
+  const ok = setup({ FAKE_SECURITY_ADD_RC: "0", FAKE_SECURITY_FIND_RC: "0" });
+  assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+  assert.equal(classifyLegacyConfig(readFileSync(configPath), { platform: "darwin" })?.location, "secondAccount98765");
+  assert.deepEqual(listTemps(state.mac.stateDir), []);
+});
+
+test("macOS: dopo la rimozione con l’app desktop aperta la vecchia copia dell’ID non torna", { skip: !bashAvailable }, (t) => {
+  const state = createIsolatedState(t);
+  const tools = createFakeTools(state);
+  mkdirSync(state.mac.legacyDir, { recursive: true });
+  const legacyConfig = join(state.mac.legacyDir, "config.json");
+  writeFileSync(legacyConfig, SKILL_CONFIG_MAC);
+  assert.equal(macStatus(state, tools, { FAKE_SECURITY_FIND_RC: "0" }).status, 0);
+  assert.ok(existsSync(join(state.mac.stateDir, "config.json")));
+
+  const removal = runBash(state, tools, [toBashPath(join(SCRIPTS_DIR, "setup-credentials.sh")), "remove"], { env: { FAKE_PGREP_RC: "0" } });
+  assert.equal(removal.status, 0, removal.stdout + removal.stderr);
+  assert.match(removal.stdout, /Chiudi l'app desktop Futuria CRM e ripeti la rimozione/);
+  assert.ok(existsSync(legacyConfig));
+  assert.equal(existsSync(state.mac.stateDir), false);
+
+  // La voce del Portachiavi non c’è più: la vecchia copia dell’ID resta dov’è.
+  const status = macStatus(state, tools, { FAKE_SECURITY_FIND_RC: "44" });
+  assert.equal(status.status, 1);
+  assert.deepEqual(lines(status.stdout), ["Chiave privata protetta: mancante", "ID account: mancante"]);
+  assert.equal(existsSync(state.mac.stateDir), false);
+});
+
+test("macOS: con il Portachiavi bloccato la rimozione è incompleta e non tocca i file", { skip: !bashAvailable }, (t) => {
+  const state = createIsolatedState(t);
+  const tools = createFakeTools(state);
+  mkdirSync(state.mac.legacyDir, { recursive: true });
+  mkdirSync(state.mac.stateDir, { recursive: true });
+  writeFileSync(join(state.mac.legacyDir, "config.json"), SKILL_CONFIG_MAC);
+  writeFileSync(join(state.mac.stateDir, "config.json"), SKILL_CONFIG_MAC);
+  const legacyBefore = snapshot(state.mac.legacyDir);
+  const newBefore = snapshot(state.mac.stateDir);
+  const removal = runBash(state, tools, [toBashPath(join(SCRIPTS_DIR, "setup-credentials.sh")), "remove"], { env: { FAKE_SECURITY_DELETE_RC: "36", FAKE_PGREP_RC: "1" } });
+  assert.equal(removal.status, 1, removal.stdout + removal.stderr);
+  assert.deepEqual(lines(removal.stdout), [
+    "[futuria-crm:rimozione-incompleta] Portachiavi non accessibile da questo processo: sbloccalo o esegui il comando fuori dalla sandbox, poi ripeti la rimozione.",
+  ]);
+  assert.deepEqual(snapshot(state.mac.stateDir), newBefore);
+  assert.deepEqual(snapshot(state.mac.legacyDir), legacyBefore);
 });
 
 test("macOS: i temporanei propri più vecchi di 10 minuti vengono rimossi", { skip: !bashAvailable }, (t) => {
