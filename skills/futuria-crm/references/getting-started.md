@@ -29,6 +29,10 @@ If the Windows launcher prints a line starting with `Attenzione: configuratore a
 
 If the user reports that the page says the configurator has closed, do not assume the outcome: first run the status check below. If the private key is present, run the first sanity read (section 3); run the launcher again only if the key is missing or the read fails.
 
+If the page says it is no longer connected to the configurator and asks to be reloaded, the user reloads it; if the message stays, run the launcher again.
+
+If the Windows launcher says that PowerShell runs in a restricted mode because of company policies (Constrained Language Mode), the protected setup cannot work on that computer: do not retry, and ask the user to contact Futuria support.
+
 ### Windows
 
 ```powershell

@@ -38,7 +38,7 @@ Riferimenti dei fornitori:
 - **Windows:** la chiave privata viene cifrata con la protezione dati dell’utente Windows e salvata nel profilo locale dell’utente.
 - **macOS:** la chiave privata viene salvata nel Portachiavi di macOS.
 - L’identificativo dell’account viene salvato in un piccolo file di configurazione locale.
-- Il configuratore grafico viene servito temporaneamente soltanto su `127.0.0.1`; non invia telemetria e non conserva la chiave nei log o nella cache del browser.
+- Il configuratore grafico viene servito temporaneamente soltanto su `127.0.0.1`; non invia telemetria e non conserva la chiave nei log o nella cache del browser. Il campo della chiave non è un campo password per il browser, quindi il browser non propone di salvarla nel proprio gestore delle password.
 - All’apertura il configuratore non fa richieste verso l’esterno. Solo se l’utente apre la guida della chiave il browser scarica da `futuriamarketing.com` l’immagine di anteprima del video e, se l’utente preme play, il video. Nessun dato inserito nel configuratore viene inviato con queste richieste.
 - Come fallback tecnico, l’utente può scegliere variabili d’ambiente; non sono il percorso consigliato per utenti non tecnici.
 

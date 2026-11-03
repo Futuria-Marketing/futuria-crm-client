@@ -61,7 +61,7 @@ Il repository include anche il manifest `.codex-plugin/plugin.json` e il marketp
 
 ## Configurazione grafica protetta
 
-Individuare la cartella installata della skill `futuria-crm`, quindi eseguire il launcher adatto al sistema operativo. Il launcher usa Node.js, già presente nella maggior parte degli ambienti Codex e Claude Code, per aprire una pagina raggiungibile soltanto su `127.0.0.1`. Il launcher avvia il configuratore in un processo separato, attende che sia pronto, stampa l’indirizzo della pagina e termina; se il configuratore non parte, lo segnala con un errore. La pagina resta attiva finché è aperta e si chiude da sola dopo il collegamento, dopo 45 minuti di inattività o comunque dopo 3 ore.
+Individuare la cartella installata della skill `futuria-crm`, quindi eseguire il launcher adatto al sistema operativo. Il launcher usa Node.js, già presente nella maggior parte degli ambienti Codex e Claude Code, per aprire una pagina raggiungibile soltanto su `127.0.0.1`. Il launcher avvia il configuratore in un processo separato, attende che sia pronto, stampa l’indirizzo della pagina e termina; se il configuratore non parte, lo segnala con un errore. Il configuratore resta attivo finché la pagina è aperta e in primo piano; si ferma da solo dopo il collegamento, dopo 45 minuti in cui la pagina resta chiusa o in un’altra scheda, e comunque dopo 3 ore. In quel caso la pagina lo segnala.
 
 La pagina:
 

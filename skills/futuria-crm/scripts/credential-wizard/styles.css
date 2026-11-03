@@ -125,7 +125,7 @@ h1 {
 }
 
 .session-closed:focus-visible {
-  outline: 3px solid rgba(168, 50, 50, 0.3);
+  outline: 3px solid var(--danger);
   outline-offset: 2px;
 }
 
@@ -209,6 +209,18 @@ h1 {
 
 .password-field input {
   padding-right: 92px;
+}
+
+/* Campo di testo mascherato al posto di type="password": il browser non lo
+   tratta come una password e non propone di salvare la chiave nel suo
+   gestore. Supportato da Chrome, Edge, Safari e Firefox 114 o successivo; dove
+   manca, app.js nasconde «Mostra» e il valore resta leggibile. */
+.masked-input {
+  -webkit-text-security: disc;
+}
+
+.masked-input.is-visible {
+  -webkit-text-security: none;
 }
 
 .visibility-toggle {
@@ -352,7 +364,8 @@ h1 {
 .text-button:focus-visible,
 input:focus-visible,
 a:focus-visible {
-  outline: 3px solid rgba(109, 163, 77, 0.35);
+  /* Contrasto di circa 4,6:1 sul bianco (WCAG 1.4.11 chiede almeno 3:1). */
+  outline: 3px solid var(--green-dark);
   outline-offset: 2px;
 }
 

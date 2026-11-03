@@ -29,6 +29,10 @@ const MAX_BODY_BYTES = 16 * 1024;
 const SESSION_IDLE_MS = 45 * 60 * 1000;
 const SESSION_MAX_MS = 3 * 60 * 60 * 1000;
 const CLOSE_AFTER_SUCCESS_MS = 3000;
+// Dopo la chiusura, margine per un collegamento già avviato (verifica fino a
+// 12 secondi più il salvataggio); poi si chiude ogni connessione rimasta.
+const FORCE_CLOSE_AFTER_MS = 20_000;
+const CLOSING_MESSAGE = "Il configuratore si è chiuso. Chiedi all’agente di riaprirlo.";
 // Tempo massimo che l’avvio staccato attende il configuratore in ascolto.
 const DETACH_READY_TIMEOUT_MS = 10_000;
 // Le uniche risorse esterne: poster e video della guida, caricati solo quando
@@ -42,7 +46,9 @@ const CONTENT_SECURITY_POLICY = [
   "style-src 'self'",
   "script-src 'self'",
   "connect-src 'self'",
-  "form-action 'self'",
+  // Il modulo si invia solo con fetch: se app.js non parte, il browser non fa
+  // un invio nativo che metterebbe la chiave nell’indirizzo e nella cronologia.
+  "form-action 'none'",
   "base-uri 'none'",
   "frame-ancestors 'none'",
   "object-src 'none'",
@@ -383,12 +389,21 @@ export async function startWizard(options = {}) {
   let lifetimeTimer;
   let successTimer;
   let closing = false;
+  // Risposte non ancora concluse: alla chiusura chiudono il proprio socket.
+  const pendingResponses = new Set();
 
   function hasSessionCookie(req) {
     return (req.headers.cookie ?? "").split(/;\s*/).some((item) => safeEqual(item, `${cookieName}=${cookieToken}`));
   }
 
   async function handleRequest(req, res) {
+    // Configuratore in chiusura (limite raggiunto o collegamento riuscito):
+    // nessuna nuova richiesta, nemmeno su una connessione rimasta aperta.
+    if (closing) {
+      sendJson(res, 503, { ok: false, message: CLOSING_MESSAGE });
+      return;
+    }
+
     const expectedHost = allowedOrigin.replace("http://", "");
     if (req.headers.host !== expectedHost) {
       sendJson(res, 400, { ok: false, message: "Richiesta locale non valida." });
@@ -498,6 +513,9 @@ export async function startWizard(options = {}) {
   }
 
   const server = createServer(async (req, res) => {
+    pendingResponses.add(res);
+    res.once("close", () => pendingResponses.delete(res));
+    if (closing) res.setHeader("Connection", "close");
     try {
       await handleRequest(req, res);
     } catch {
@@ -524,8 +542,17 @@ export async function startWizard(options = {}) {
     clearTimeout(idleTimer);
     clearTimeout(lifetimeTimer);
     clearTimeout(successTimer);
+    // Una richiesta già in corso (per esempio un collegamento) finisce, ma il
+    // suo socket si chiude dopo la risposta invece di restare in keep-alive.
+    for (const res of pendingResponses) {
+      if (!res.headersSent) res.setHeader("Connection", "close");
+    }
     server.close();
     server.closeIdleConnections?.();
+    // server.close() non fa più scadere le richieste lasciate a metà: dopo il
+    // margine si chiude tutto ciò che è rimasto aperto.
+    const forceClose = setTimeout(() => server.closeAllConnections?.(), FORCE_CLOSE_AFTER_MS);
+    forceClose.unref();
   }
 
   function touch() {
@@ -636,15 +663,35 @@ async function main() {
   const args = parseArgs(rawArgs);
 
   if (args.detach) {
+    // Prima di avviare qualunque processo: se il file d’esito non si può
+    // scrivere, l’avvio fallisce qui e non resta in ascolto nessun configuratore.
+    if (args.resultFile) {
+      try {
+        writeFileSync(args.resultFile, "", { encoding: "utf8", mode: 0o600 });
+      } catch {
+        throw new Error("non riesco a scrivere il file con l’esito dell’avvio.");
+      }
+    }
     let started;
     try {
       started = await startDetached(childArguments(rawArgs));
     } catch (error) {
-      writeResultFile(args.resultFile, { ok: false, message: error.message });
+      try {
+        writeResultFile(args.resultFile, { ok: false, message: error.message });
+      } catch {
+        // L’errore di avvio resta comunque su stderr.
+      }
       throw error;
     }
     const { pid, url } = started;
-    writeResultFile(args.resultFile, { ok: true, pid, url });
+    try {
+      writeResultFile(args.resultFile, { ok: true, pid, url });
+    } catch {
+      // Senza esito nessuno conoscerebbe l’indirizzo: il configuratore appena
+      // avviato si chiude invece di restare in ascolto.
+      try { process.kill(pid); } catch { /* già chiuso */ }
+      throw new Error("non riesco a scrivere il file con l’esito dell’avvio.");
+    }
     process.stdout.write(args.noOpen
       ? `Configuratore Futuria CRM disponibile su ${url} (processo separato, PID ${pid}).\n`
       : `Configuratore grafico Futuria CRM aperto nel browser (processo separato, PID ${pid}).\n`

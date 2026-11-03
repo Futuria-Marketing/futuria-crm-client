@@ -5,6 +5,15 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# Con criteri aziendali (AppLocker, WDAC) PowerShell gira in Constrained
+# Language Mode: ne' il configuratore ne' il salvataggio protetto DPAPI possono
+# funzionare, quindi lo si dice subito invece di fermarsi con un errore tecnico.
+if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
+    Write-Output "La configurazione protetta Futuria CRM non puo' funzionare in questa modalita' di PowerShell (criteri aziendali). Contatta il supporto Futuria."
+    exit 1
+}
+
 $wizardScript = Join-Path $PSScriptRoot "credential-wizard.mjs"
 $setupScript = Join-Path $PSScriptRoot "setup-credentials.ps1"
 
@@ -54,7 +63,17 @@ if (Test-Path -LiteralPath $wizardScript) {
     $node = Get-Command node.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $node) { $node = Get-Command node -ErrorAction SilentlyContinue | Select-Object -First 1 }
     if ($node) {
-        $resultFile = Join-Path ([System.IO.Path]::GetTempPath()) ("futuria-crm-avvio-{0}.json" -f [guid]::NewGuid().ToString("N"))
+        $tempDirectory = $env:TEMP
+        if (-not $tempDirectory) { $tempDirectory = $env:TMP }
+        $resultFile = Join-Path $tempDirectory ("futuria-crm-avvio-{0}.json" -f [guid]::NewGuid().ToString("N"))
+        # Il file d'esito deve potersi scrivere prima di avviare qualunque
+        # processo: cosi' un esito assente significa che non e' partito nulla.
+        try {
+            New-Item -ItemType File -Force -Path $resultFile | Out-Null
+        } catch {
+            Write-Output "Impossibile avviare il configuratore grafico Futuria CRM: la cartella temporanea non e' scrivibile."
+            exit 1
+        }
         # I percorsi di Windows non possono contenere virgolette: racchiuderli
         # tra virgolette basta a gestire gli spazi.
         $wizardArguments = @(('"{0}"' -f $wizardScript), '--detach', '--result-file', ('"{0}"' -f $resultFile))
@@ -69,7 +88,14 @@ if (Test-Path -LiteralPath $wizardScript) {
         $usedFallback = $false
         $wmiProcessId = Start-OutsideAgentJob -CommandLine $commandLine
         if ($wmiProcessId) {
+            # Il timeout di Wait-Process e' silenzioso: se il processo
+            # intermedio e' ancora vivo lo si termina (nel suo timeout chiude
+            # gia' il configuratore figlio), cosi' il ripiego non parte in
+            # parallelo a un avvio ancora in corso.
             Wait-Process -Id $wmiProcessId -Timeout 20 -ErrorAction SilentlyContinue
+            if (Get-Process -Id $wmiProcessId -ErrorAction SilentlyContinue) {
+                Stop-Process -Id $wmiProcessId -Force -ErrorAction SilentlyContinue
+            }
             $outcome = Read-WizardResult -Path $resultFile
         }
 
@@ -78,8 +104,9 @@ if (Test-Path -LiteralPath $wizardScript) {
             # dell'agente e puo' chiudersi quando il comando finisce.
             $usedFallback = $true
             $process = Start-Process -FilePath $node.Source -ArgumentList $argumentLine -WindowStyle Hidden -PassThru
-            if (-not $process.WaitForExit(20000)) {
-                try { $process.Kill() } catch { }
+            Wait-Process -Id $process.Id -Timeout 20 -ErrorAction SilentlyContinue
+            if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {
+                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
             }
             $outcome = Read-WizardResult -Path $resultFile
         }
@@ -87,7 +114,7 @@ if (Test-Path -LiteralPath $wizardScript) {
         if (-not ($outcome -and $outcome.ok)) {
             $reason = "nessuna risposta dal configuratore."
             if ($outcome -and $outcome.message) { $reason = [string]$outcome.message }
-            [Console]::Error.WriteLine("Impossibile avviare il configuratore grafico Futuria CRM: $reason")
+            Write-Output "Impossibile avviare il configuratore grafico Futuria CRM: $reason"
             exit 1
         }
 
@@ -110,4 +137,4 @@ if (-not (Test-Path -LiteralPath $setupScript)) {
 
 $argumentLine = '-NoProfile -ExecutionPolicy Bypass -NoExit -File "{0}"' -f $setupScript.Replace('"', '""')
 Start-Process -FilePath "powershell.exe" -ArgumentList $argumentLine -WindowStyle Normal | Out-Null
-Write-Output "Node.js non è disponibile: aperta la configurazione protetta in PowerShell."
+Write-Output "Node.js non e' disponibile: aperta la configurazione protetta in PowerShell."

@@ -6,9 +6,16 @@
   const VIDEO_SRC = "https://futuriamarketing.com/assets/ai/futuria-crm/creare-token-pit-agents.mp4";
   const VIDEO_POSTER = "https://futuriamarketing.com/assets/ai/futuria-crm/creare-token-pit-agents.webp";
   const GUIDE_URL = "https://futuriamarketing.com/supporto/come-creare-token-pit-futuria-crm/";
+  const CRM_URL = "https://app.futuriamarketing.com/";
   const HEARTBEAT_MS = 60 * 1000;
   const CLOSED_MESSAGE = "Il configuratore si è chiuso: da questa pagina non è stata salvata nessuna chiave. Se hai già completato il collegamento in un’altra scheda puoi chiudere questa pagina, altrimenti chiedi all’agente di riaprirlo.";
   const UNCERTAIN_MESSAGE = "Il configuratore si è chiuso durante l’invio: la chiave potrebbe essere stata salvata oppure no. Chiedi all’agente di verificare e, se serve, di riaprirlo.";
+  const UNLINKED_MESSAGE = "Questa pagina non è più collegata al configuratore. Ricaricala; se il messaggio resta, chiedi all’agente di riaprirlo.";
+  const CLOSED_MESSAGES = {
+    closed: CLOSED_MESSAGE,
+    uncertain: UNCERTAIN_MESSAGE,
+    unlinked: UNLINKED_MESSAGE,
+  };
 
   const form = document.getElementById("credential-form");
   const accountInput = document.getElementById("account-link");
@@ -73,24 +80,29 @@
   }
 
   const guides = [
-    { button: document.getElementById("link-help-button"), dialog: document.getElementById("link-guide") },
+    {
+      button: document.getElementById("link-help-button"),
+      dialog: document.getElementById("link-guide"),
+      fallbackUrl: CRM_URL,
+    },
     {
       button: document.getElementById("key-help-button"),
       dialog: document.getElementById("key-guide"),
       onOpen: mountVideo,
       onClose: unmountVideo,
+      fallbackUrl: GUIDE_URL,
     },
   ];
 
-  for (const { button, dialog, onOpen, onClose } of guides) {
+  for (const { button, dialog, onOpen, onClose, fallbackUrl } of guides) {
     button.addEventListener("click", () => {
       if (typeof dialog.showModal !== "function") {
-        // Browser senza <dialog>: la guida online contiene gli stessi passi.
-        window.open(GUIDE_URL, "_blank", "noreferrer");
+        // Browser senza <dialog>: la pagina di riferimento di quel campo.
+        window.open(fallbackUrl, "_blank", "noreferrer");
         return;
       }
       if (dialog.open) return;
-      onOpen?.();
+      if (onOpen) onOpen();
       dialog.showModal();
     });
     dialog.addEventListener("click", (event) => {
@@ -102,9 +114,17 @@
       closeControl.addEventListener("click", () => dialog.close());
     });
     dialog.addEventListener("close", () => {
-      onClose?.();
-      button.focus();
+      if (onClose) onClose();
+      // L’evento arriva dopo la chiusura: se nel frattempo il configuratore si
+      // è chiuso, il focus va all’avviso e non al pulsante di aiuto.
+      if (serverClosed) sessionClosed.focus();
+      else if (connected) successState.focus();
+      else button.focus();
     });
+  }
+
+  function guideOpen() {
+    return guides.some(({ dialog }) => dialog.open);
   }
 
   function closeGuides() {
@@ -117,6 +137,9 @@
   // attivo e, se non risponde più, avvisa il cliente prima che incolli la chiave.
   function showServerClosed(reason = "closed") {
     if (connected) return;
+    // In anteprima non si salva mai nulla: l’esito non è mai incerto.
+    const effectiveReason = previewMode && reason === "uncertain" ? "closed" : reason;
+    const hadGuideOpen = guideOpen();
     serverClosed = true;
     clearInterval(heartbeatTimer);
     keyInput.value = "";
@@ -124,10 +147,16 @@
     form.classList.add("is-closed");
     // Un esito incerto (chiusura durante l’invio) non torna mai al messaggio generico.
     if (closedReason !== "uncertain") {
-      closedReason = reason;
-      sessionClosed.textContent = reason === "uncertain" ? UNCERTAIN_MESSAGE : CLOSED_MESSAGE;
+      closedReason = effectiveReason;
+      sessionClosed.textContent = CLOSED_MESSAGES[effectiveReason] || CLOSED_MESSAGE;
     }
     sessionClosed.hidden = false;
+    // Con una guida aperta l’avviso resterebbe sotto lo sfondo, nel contenuto
+    // reso inerte dalla finestra: la guida si chiude e il focus va all’avviso.
+    if (hadGuideOpen) {
+      closeGuides();
+      sessionClosed.focus();
+    }
   }
 
   function showConnected(result, otherTab = false) {
@@ -148,16 +177,25 @@
     successState.focus();
   }
 
+  // Stato del configuratore: "ok"; "unlinked" se risponde ma questa pagina
+  // non ha più il cookie di sessione (403); "closed" per errore di rete, 404
+  // o configuratore in chiusura.
+  async function checkServer() {
+    try {
+      const response = await fetch("status", { cache: "no-store", credentials: "same-origin" });
+      if (response.ok) return "ok";
+      return response.status === 403 ? "unlinked" : "closed";
+    } catch {
+      return "closed";
+    }
+  }
+
   async function heartbeat() {
     // Solo con la pagina in vista: una scheda nascosta e dimenticata non tiene
     // vivo il configuratore, che si chiude da solo dopo l’inattività.
     if (serverClosed || connected || document.visibilityState !== "visible") return;
-    try {
-      const response = await fetch("status", { cache: "no-store", credentials: "same-origin" });
-      if (!response.ok) throw new Error("status");
-    } catch {
-      showServerClosed();
-    }
+    const state = await checkServer();
+    if (state !== "ok") showServerClosed(state);
   }
 
   heartbeatTimer = setInterval(heartbeat, HEARTBEAT_MS);
@@ -171,7 +209,7 @@
     channel = new BroadcastChannel(`futuria-crm-setup:${window.location.pathname}`);
     channel.addEventListener("message", (event) => {
       const data = event.data;
-      if (connected || data?.type !== "connected" || typeof data.accountName !== "string") return;
+      if (connected || !data || data.type !== "connected" || typeof data.accountName !== "string") return;
       showConnected({ accountName: data.accountName, preview: Boolean(data.preview) }, true);
     });
   } catch {
@@ -222,11 +260,18 @@
 
   accountInput.addEventListener("input", updateAccountPreview);
 
+  // La chiave sta in un campo di testo mascherato dal CSS, mai type="password":
+  // così il browser non la tratta come una password e non propone di salvarla
+  // nel suo gestore. Dove il mascheramento non è supportato il valore resta
+  // leggibile e «Mostra» non serve.
+  const canMask = typeof CSS !== "undefined" && typeof CSS.supports === "function"
+    && CSS.supports("-webkit-text-security", "disc");
+  if (!canMask) visibilityToggle.hidden = true;
+
   visibilityToggle.addEventListener("click", () => {
-    const showing = keyInput.type === "text";
-    keyInput.type = showing ? "password" : "text";
-    visibilityToggle.textContent = showing ? "Mostra" : "Nascondi";
-    visibilityToggle.setAttribute("aria-pressed", String(!showing));
+    const showing = keyInput.classList.toggle("is-visible");
+    visibilityToggle.textContent = showing ? "Nascondi" : "Mostra";
+    visibilityToggle.setAttribute("aria-pressed", String(showing));
     keyInput.focus();
   });
 
@@ -251,7 +296,7 @@
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (serverClosed) {
-      showServerClosed();
+      showServerClosed(closedReason || "closed");
       sessionClosed.focus();
       return;
     }
@@ -259,13 +304,23 @@
 
     submitButton.disabled = true;
     submitLabel.textContent = "Verifico e collego…";
-    let body = JSON.stringify({
-      accountLink: accountInput.value.trim(),
-      privateKey: keyInput.value.trim(),
-    });
-    keyInput.value = "";
 
     try {
+      // Prima di spedire la chiave: se il configuratore non risponde più, la
+      // chiave non lascia la pagina e l’avviso dice il vero (nulla è stato salvato).
+      const state = await checkServer();
+      if (state !== "ok") {
+        showServerClosed(state);
+        sessionClosed.focus();
+        return;
+      }
+
+      let body = JSON.stringify({
+        accountLink: accountInput.value.trim(),
+        privateKey: keyInput.value.trim(),
+      });
+      keyInput.value = "";
+
       let response;
       try {
         response = await fetch("connect", {
@@ -278,8 +333,8 @@
           body,
         });
       } catch {
-        // La richiesta è partita ma la risposta non è arrivata: il salvataggio
-        // può essere avvenuto o no, quindi il messaggio non promette nulla.
+        // Il configuratore rispondeva un attimo prima, poi la risposta non è
+        // arrivata: il salvataggio può essere avvenuto o no.
         showServerClosed("uncertain");
         sessionClosed.focus();
         return;
@@ -296,7 +351,7 @@
 
       showConnected(result);
       try {
-        channel?.postMessage({ type: "connected", accountName: result.accountName, preview: Boolean(result.preview) });
+        if (channel) channel.postMessage({ type: "connected", accountName: result.accountName, preview: Boolean(result.preview) });
       } catch {
         // Le altre schede, se ci sono, mostreranno l’avviso di chiusura.
       }

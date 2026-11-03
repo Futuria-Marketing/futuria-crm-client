@@ -26,7 +26,7 @@
 
         <div class="session-closed" id="session-closed" role="alert" tabindex="-1" hidden>Il configuratore si è chiuso: da questa pagina non è stata salvata nessuna chiave. Se hai già completato il collegamento in un’altra scheda puoi chiudere questa pagina, altrimenti chiedi all’agente di riaprirlo.</div>
 
-        <form id="credential-form" novalidate>
+        <form id="credential-form" method="post" novalidate>
           <div class="field-group">
             <div class="label-row">
               <label for="account-link">Link dell’account</label>
@@ -41,7 +41,6 @@
             </div>
             <input
               id="account-link"
-              name="account-link"
               type="url"
               inputmode="url"
               autocomplete="off"
@@ -68,15 +67,16 @@
             <div class="password-field">
               <input
                 id="private-key"
-                name="private-key"
-                type="password"
-                autocomplete="new-password"
+                class="masked-input"
+                type="text"
+                autocomplete="off"
                 autocapitalize="none"
+                autocorrect="off"
                 spellcheck="false"
                 placeholder="Incolla qui la chiave privata"
                 aria-describedby="key-help key-error"
               >
-              <button class="visibility-toggle" id="visibility-toggle" type="button" aria-controls="private-key">Mostra</button>
+              <button class="visibility-toggle" id="visibility-toggle" type="button" aria-controls="private-key" aria-pressed="false">Mostra</button>
             </div>
             <p class="field-help" id="key-help">Inizia con pit-. Non sarà mostrata all’agente, inviata in chat o salvata in chiaro.</p>
             <p class="field-error" id="key-error" role="alert"></p>

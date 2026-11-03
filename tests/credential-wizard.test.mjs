@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -135,6 +136,23 @@ function processAlive(pid) {
   }
 }
 
+// PID dei configuratori in esecuzione su Windows (node.exe con
+// credential-wizard.mjs nella riga di comando).
+function windowsWizardProcessIds() {
+  const list = spawnSync(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object { $_.CommandLine -like '*credential-wizard.mjs*' } | ForEach-Object { $_.ProcessId }",
+    ],
+    { encoding: "utf8", timeout: 30000 },
+  );
+  assert.equal(list.status, 0, list.stderr);
+  return new Set(list.stdout.split(/\s+/).filter(Boolean).map(Number));
+}
+
 test("estrae l’ID da un link Futuria CRM o da un ID diretto", () => {
   assert.equal(parseLocationInput("demoAccount1234567890"), "demoAccount1234567890");
   assert.equal(
@@ -180,6 +198,10 @@ test("il server locale usa sessione, cookie e CSRF e completa solo la preview", 
   assert.doesNotMatch(csp, /https:\/\/futuriamarketing\.com[;\s]/);
   assert.match(csp, /connect-src 'self';/);
   assert.match(csp, /script-src 'self';/);
+  // Nessun invio nativo del modulo: senza app.js la chiave non finisce
+  // nell’indirizzo né nella cronologia.
+  assert.match(csp, /form-action 'none';/);
+  assert.doesNotMatch(csp, /form-action 'self'/);
   assert.match(pageResponse.headers.get("cache-control"), /no-store/);
   const cookie = pageResponse.headers.get("set-cookie");
   assert.match(cookie, /HttpOnly/);
@@ -233,7 +255,23 @@ test("la pagina è solo il modulo, con un pulsante di aiuto accanto a ogni campo
 
   // La colonna della guida non c’è più.
   assert.doesNotMatch(html, /guide-panel|guide-accordion|<details/);
-  assert.match(html, /<form id="credential-form"/);
+  assert.match(html, /<form id="credential-form" method="post" novalidate>/);
+
+  // Il campo della chiave non è un campo password: il browser non lo legge
+  // come una credenziale e non propone di salvarlo nel suo gestore.
+  const keyField = html.match(/<input\s+id="private-key"[^>]*>/)?.[0];
+  assert.ok(keyField, "campo della chiave presente");
+  assert.doesNotMatch(keyField, /type="password"/);
+  assert.doesNotMatch(keyField, /new-password|current-password/);
+  assert.match(keyField, /type="text"/);
+  assert.match(keyField, /class="masked-input"/);
+  assert.match(keyField, /autocomplete="off"/);
+  assert.doesNotMatch(html, /type="password"/);
+  // Senza attributo name un eventuale invio nativo non porta i valori.
+  const accountField = html.match(/<input\s+id="account-link"[^>]*>/)?.[0];
+  assert.ok(accountField, "campo del link presente");
+  assert.doesNotMatch(accountField, /\sname=/);
+  assert.doesNotMatch(keyField, /\sname=/);
 
   // I due pulsanti di aiuto stanno accanto all’etichetta del rispettivo campo.
   assert.match(html, /<label for="account-link">Link dell’account<\/label>\s*<button class="help-button" id="link-help-button" type="button" aria-haspopup="dialog" aria-controls="link-guide">/);
@@ -282,6 +320,12 @@ test("la pagina è solo il modulo, con un pulsante di aiuto accanto a ogni campo
   assert.doesNotMatch(styles, /\.guide-panel|\.accordion|\.video-guide/);
   assert.match(styles, /\.guide-dialog::backdrop/);
   assert.match(styles, /\.dialog-body \{[^}]*overflow-y: auto/);
+  // Mascheramento del campo chiave via CSS.
+  assert.match(styles, /\.masked-input \{\s*-webkit-text-security: disc;\s*\}/);
+  assert.match(styles, /\.masked-input\.is-visible \{\s*-webkit-text-security: none;\s*\}/);
+  // Focus da tastiera ben visibile su pulsanti di aiuto e chiusura.
+  const focusRule = styles.match(/\.help-button:focus-visible,[\s\S]*?\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(focusRule, /outline: 3px solid var\(--green-dark\);/);
 });
 
 test("lo script della pagina carica il video solo nella finestra della chiave", () => {
@@ -296,16 +340,49 @@ test("lo script della pagina carica il video solo nella finestra della chiave", 
   assert.match(app, /video\.pause\(\);/);
   assert.match(app, /dialog\.showModal\(\);/);
   assert.match(app, /if \(event\.target === dialog\) dialog\.close\(\);/);
-  assert.match(app, /dialog\.addEventListener\("close", \(\) => \{\s*onClose\?\.\(\);\s*button\.focus\(\);/);
+  // Alla chiusura della guida il focus va all’avviso se il configuratore si è
+  // chiuso nel frattempo, altrimenti torna al pulsante di aiuto.
+  assert.match(app, /dialog\.addEventListener\("close", \(\) => \{\s*if \(onClose\) onClose\(\);[\s\S]*?if \(serverClosed\) sessionClosed\.focus\(\);[\s\S]*?else button\.focus\(\);/);
+  // Senza <dialog> ogni guida apre la propria pagina di riferimento.
+  assert.match(app, /window\.open\(fallbackUrl, "_blank", "noreferrer"\)/);
+  assert.match(app, /dialog: document\.getElementById\("link-guide"\),\s*fallbackUrl: CRM_URL,/);
+  assert.match(app, /onClose: unmountVideo,\s*fallbackUrl: GUIDE_URL,/);
+
+  // Nessun optional chaining: la pagina resta compatibile con i browser
+  // meno recenti, che altrimenti non eseguirebbero lo script.
+  assert.doesNotMatch(app, /\?\./);
+
+  // Il campo della chiave non diventa mai type="password".
+  assert.doesNotMatch(app, /keyInput\.type\s*=/);
+  assert.doesNotMatch(app, /\.type\s*=\s*(?:showing \? )?"password"/);
+  assert.match(app, /keyInput\.classList\.toggle\("is-visible"\)/);
+  assert.match(app, /CSS\.supports\("-webkit-text-security", "disc"\)/);
 
   // Battito solo con la scheda in vista.
   assert.match(app, /fetch\("status"/);
   assert.match(app, /HEARTBEAT_MS = 60 \* 1000/);
   assert.match(app, /document\.visibilityState !== "visible"\) return;/);
+  // Un 403 vuol dire pagina senza sessione, non configuratore chiuso.
+  assert.match(app, /response\.status === 403 \? "unlinked" : "closed"/);
+  assert.match(app, /Questa pagina non è più collegata al configuratore\. Ricaricala/);
+
+  // Prima di spedire la chiave la pagina controlla che il configuratore
+  // risponda: se è chiuso la chiave non lascia la pagina.
+  const submitHandler = app.slice(app.indexOf('form.addEventListener("submit"'), app.indexOf("function closeWindow"));
+  const checkServerBody = app.slice(app.indexOf("async function checkServer()"), app.indexOf("async function heartbeat()"));
+  assert.match(checkServerBody, /fetch\("status"/);
+  const pingAt = submitHandler.indexOf("await checkServer()");
+  assert.ok(pingAt > 0, "controllo di presenza nel gestore submit");
+  assert.ok(pingAt < submitHandler.indexOf("JSON.stringify("), "il controllo precede la costruzione del corpo");
+  assert.ok(pingAt < submitHandler.indexOf('fetch("connect"'), "il controllo precede l’invio");
 
   // Messaggi di chiusura veri in ogni caso.
   assert.match(app, /la chiave potrebbe essere stata salvata oppure no\. Chiedi all’agente di verificare/);
   assert.match(app, /showServerClosed\("uncertain"\)/);
+  // In anteprima non si salva nulla: mai il messaggio di esito incerto.
+  assert.match(app, /previewMode && reason === "uncertain" \? "closed" : reason/);
+  // Con una guida aperta, l’avviso non resta sotto lo sfondo della finestra.
+  assert.match(app, /if \(hadGuideOpen\) \{\s*closeGuides\(\);\s*sessionClosed\.focus\(\);/);
   assert.match(app, /new BroadcastChannel\(/);
   assert.match(app, /Collegamento completato in un’altra scheda/);
 });
@@ -400,6 +477,49 @@ test("il limite assoluto chiude il server anche con il battito attivo", async (t
   }
   assert.ok(closedAt > 0, "il server deve chiudersi");
   assert.ok(closedAt >= 1100 && closedAt < 4000, `chiuso dopo ${closedAt} ms`);
+});
+
+test("alla chiusura una connessione già aperta non accetta altre richieste", async (t) => {
+  const { server, url } = await startWizard({
+    preview: true,
+    noOpen: true,
+    port: 0,
+    idleTimeoutMs: 60_000,
+    maxLifetimeMs: 800,
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const target = new URL(url);
+  const { cookie, csrf } = await openSession(url);
+  const body = JSON.stringify({ accountLink: "demoAccount1234567890", privateKey: PREVIEW_KEY });
+  const head = `POST ${target.pathname}connect HTTP/1.1\r\nHost: ${target.host}\r\nOrigin: ${target.origin}\r\n`
+    + `Cookie: ${cookie.split(";", 1)[0]}\r\nX-Futuria-CSRF: ${csrf}\r\nContent-Type: application/json\r\n`
+    + `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n`;
+
+  const socket = netConnect(Number(target.port), "127.0.0.1");
+  t.after(() => socket.destroy());
+  let data = "";
+  let socketClosed = false;
+  socket.setEncoding("utf8");
+  socket.on("data", (chunk) => { data += chunk; });
+  socket.on("close", () => { socketClosed = true; });
+  socket.on("error", () => {});
+  await once(socket, "connect");
+
+  // Intestazioni prima del limite, corpo dopo: la richiesta è in corso
+  // quando il configuratore si chiude.
+  socket.write(head);
+  assert.equal(await waitFor(() => !server.listening, 5000), true, "il limite assoluto chiude il server");
+  socket.write(body);
+  assert.equal(await waitFor(() => data.includes("\r\n\r\n"), 3000), true, "la richiesta in corso riceve risposta");
+  assert.match(data, /^HTTP\/1\.1 200/);
+  assert.match(data, /\r\nConnection: close\r\n/i);
+
+  // Una seconda richiesta sullo stesso socket non deve passare.
+  data = "";
+  if (!socketClosed) socket.write(head + body);
+  await waitFor(() => socketClosed || /\r\n\r\n/.test(data), 3000);
+  assert.doesNotMatch(data, /^HTTP\/1\.1 200/);
+  assert.equal(await waitFor(() => socketClosed, 3000), true, "il socket si chiude");
 });
 
 test("dopo un collegamento riuscito il server si chiude da solo", async (t) => {
@@ -501,6 +621,61 @@ test("--detach esce con errore se il configuratore non può mettersi in ascolto"
   const result = JSON.parse(readFileSync(resultFile, "utf8"));
   assert.equal(result.ok, false);
   assert.match(result.message, /EADDRINUSE/);
+});
+
+test("--detach non avvia nulla se il file d’esito non si può scrivere", async () => {
+  const port = await freePort();
+  const url = `http://127.0.0.1:${port}/preview/`;
+  const resultFile = join(tmpdir(), `futuria-nonexist-${randomBytes(6).toString("hex")}`, "esito.json");
+
+  const launch = spawnSync(
+    process.execPath,
+    [WIZARD_SCRIPT, "--detach", "--preview", "--no-open", "--port", String(port), "--result-file", resultFile],
+    { encoding: "utf8", timeout: 15000 },
+  );
+  // Nessun configuratore rimasto in ascolto senza che qualcuno ne conosca
+  // l’indirizzo; se ci fosse, lo si chiude con un collegamento di anteprima.
+  const listening = await pageOk(url);
+  if (listening) {
+    const { cookie, csrf } = await openSession(url);
+    await (await previewConnect(url, cookie, csrf)).arrayBuffer();
+  }
+  assert.equal(launch.error, undefined);
+  assert.equal(listening, false);
+  assert.equal(launch.status, 1, launch.stdout);
+  assert.match(launch.stderr, /Impossibile avviare il configuratore/);
+  assert.doesNotMatch(launch.stdout, /PID/);
+});
+
+test("il launcher Windows non avvia nulla se la cartella temporanea non è scrivibile", {
+  skip: process.platform !== "win32",
+}, (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "futuria-launcher-test-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  // TEMP e TMP puntano a un file: il file d’esito non si può creare.
+  const notADirectory = join(directory, "non-una-cartella");
+  writeFileSync(notADirectory, "");
+  const environment = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !["temp", "tmp"].includes(key.toLowerCase())),
+  );
+  environment.TEMP = notADirectory;
+  environment.TMP = notADirectory;
+
+  const before = windowsWizardProcessIds();
+  const launch = spawnSync(
+    "powershell.exe",
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", LAUNCHER_PS1, "-Preview", "-NoOpen"],
+    { encoding: "utf8", timeout: 60000, env: environment },
+  );
+  // Prima delle asserzioni: anche se il test fallisce non resta nulla in ascolto.
+  const leaked = [...windowsWizardProcessIds()].filter((pid) => !before.has(pid));
+  for (const pid of leaked) {
+    try { process.kill(pid); } catch { /* già chiuso */ }
+  }
+  assert.equal(launch.error, undefined);
+  assert.deepEqual(leaked, [], "nessun nuovo configuratore in esecuzione");
+  assert.equal(launch.status, 1, launch.stdout + launch.stderr);
+  assert.match(launch.stdout, /la cartella temporanea non e' scrivibile/);
 });
 
 test("il launcher Windows avvia il configuratore via WMI e ne comunica l’indirizzo", {

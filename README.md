@@ -35,7 +35,7 @@ Dopo l’installazione l’agente apre un configuratore grafico locale. L’uten
 3. crea la chiave privata nel proprio account Futuria CRM e incolla nel configuratore il link e la chiave;
 4. attende la verifica in sola lettura e torna alla chat.
 
-La pagina è disponibile soltanto sul computer dell’utente e resta attiva finché è aperta: si chiude da sola dopo il collegamento, dopo 45 minuti di inattività o comunque dopo 3 ore. La chiave non entra nel prompt, negli argomenti dei comandi o nei log del configuratore.
+La pagina è disponibile soltanto sul computer dell’utente. Il configuratore resta attivo finché la pagina è aperta e in primo piano; si ferma da solo dopo il collegamento, dopo 45 minuti in cui la pagina resta chiusa o in un’altra scheda, e comunque dopo 3 ore. In quel caso la pagina lo segnala. La chiave non entra nel prompt, negli argomenti dei comandi o nei log del configuratore.
 
 - **Windows:** la chiave viene cifrata con Windows DPAPI per l’utente corrente.
 - **macOS:** la chiave viene salvata nel Portachiavi di macOS.
