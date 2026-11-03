@@ -1,10 +1,11 @@
 # Futuria CRM — skill per agenti AI
 
-Plugin ufficiale **Futuria Marketing** per collegare Codex o Claude Code al proprio account **Futuria CRM** tramite API diretta. L’account autorizza il collegamento con un **Private Integration Token (PIT)**, presentato nel configuratore semplicemente come **chiave privata di collegamento**.
+Plugin ufficiale **Futuria Marketing** per collegare il proprio agente AI all’account **Futuria CRM** tramite API diretta. L’account autorizza il collegamento con un **Private Integration Token (PIT)**, presentato nel configuratore semplicemente come **chiave privata di collegamento**.
+
+Serve l’app installata sul computer: **Claude Code** (app desktop, terminale o VS Code) oppure l’**app ChatGPT per computer** in modalità **Work**. Le versioni da browser, come claude.ai o chatgpt.com, non funzionano: non possono installare la skill né aprire la configurazione protetta sul tuo computer.
 
 La release attuale:
 
-- funziona con **Codex** e **Claude Code**;
 - installa la skill `futuria-crm`;
 - usa un solo account Futuria CRM;
 - non installa e non richiede alcun connettore MCP;
@@ -13,7 +14,7 @@ La release attuale:
 
 ## Il testo da incollare al proprio agente
 
-Copia questo testo in una chat nuova di Codex o Claude Code:
+Copia questo testo in una chat nuova dell’app installata sul computer: **Claude Code** (app desktop, terminale o VS Code) oppure l’**app ChatGPT per computer** in modalità **Work**. Le versioni da browser, come claude.ai o chatgpt.com, non funzionano.
 
 ```text
 Installa la release stabile della skill Futuria CRM dal repository pubblico

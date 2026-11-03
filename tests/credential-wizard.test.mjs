@@ -257,6 +257,9 @@ test("la pagina è solo il modulo, con un pulsante di aiuto accanto a ogni campo
   assert.doesNotMatch(html, /guide-panel|guide-accordion|<details/);
   assert.match(html, /<form id="credential-form" method="post" novalidate>/);
 
+  // Sotto l’introduzione la pagina dice con quali app funziona.
+  assert.match(html, /<p class="form-intro">[\s\S]*?<\/p>\s*<p class="runtime-note" id="runtime-note">Funziona con Claude Code o con l’app ChatGPT per computer in modalità Work, non con le versioni da browser\.<\/p>/);
+
   // Il campo della chiave è un campo password: nascosto in ogni browser e
   // non letto ad alta voce dai lettori di schermo. Nessun mascheramento CSS.
   const keyField = html.match(/<input\s+id="private-key"[^>]*>/)?.[0];

@@ -24,6 +24,8 @@ Correzione dell’errore «NetworkError when attempting to fetch resource» che 
 
 **Pagina più semplice.** La pagina mostra solo il modulo. Accanto a ciascun campo c’è un pulsante di aiuto, «Dove trovo il link?» e «Scopri dove trovare questa chiave», che apre una finestra di guida. Quella della chiave contiene il video di 29 secondi, i tre passaggi con le schermate, il pulsante «Apri Futuria CRM» e il link alla guida online. All’apertura la pagina non fa richieste esterne: anteprima e video arrivano da `futuriamarketing.com` solo quando il cliente apre la guida della chiave, e la pagina accetta soltanto quei due file.
 
+**Requisiti più chiari.** Configuratore, README e INSTALL.md dicono che serve l’app installata sul computer, Claude Code oppure l’app ChatGPT per computer in modalità Work, e che le versioni da browser non funzionano; se l’agente gira in una versione da browser o in un ambiente cloud senza accesso al computer, si ferma e lo spiega.
+
 ## 1.3.1 — 2026-11-02
 
 - Moved the repository to the `Futuria-Marketing` GitHub organization: installation commands, plugin manifests and the privacy policy link now point to the new owner.
