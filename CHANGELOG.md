@@ -12,12 +12,12 @@ Correzione dell’errore «NetworkError when attempting to fetch resource» che 
 
 **Correzione.**
 
-- La sessione resta aperta finché la pagina è aperta: la pagina manda un segnale ogni 60 secondi a una nuova verifica `status`, e il configuratore si chiude solo dopo 45 minuti senza richieste oppure pochi secondi dopo un collegamento riuscito.
-- Il configuratore parte in un processo separato (`--detach`), indipendente dall’agente. Su macOS nasce in una nuova sessione. Su Windows il launcher lo crea tramite WMI, fuori dal job dell’agente, e usa `Start-Process` solo se WMI non è disponibile: `--detach` da solo non basta a uscire dal job.
-- Gli errori di salvataggio e le richieste malformate ricevono una risposta di errore e il configuratore resta attivo.
-- Se il configuratore si chiude comunque, la pagina lo dice subito in italiano, disattiva il pulsante e chiede di riaprirlo dall’agente; la chiave non resta nella pagina.
+- La sessione resta aperta finché la pagina è aperta e in vista: la pagina manda un segnale ogni 60 secondi a una nuova verifica `status`, protetta dal cookie di sessione. Il configuratore si chiude pochi secondi dopo un collegamento riuscito, dopo 45 minuti senza richieste autenticate (anche una scheda nascosta e dimenticata smette di tenerlo attivo) e comunque dopo 3 ore.
+- Il configuratore parte in un processo separato (`--detach`), indipendente dall’agente. Chi lo avvia aspetta che sia davvero in ascolto, stampa l’indirizzo della pagina e, se non parte (per esempio porta occupata), esce con un errore invece di dire che è aperto. Su macOS nasce in una nuova sessione. Su Windows il launcher lo crea tramite WMI, fuori dal job dell’agente, con un tempo massimo di attesa; usa `Start-Process` solo se WMI non funziona e in quel caso lo scrive nell’output, perché il configuratore potrebbe chiudersi alla fine del comando.
+- Gli errori di salvataggio, le richieste malformate e un browser che non si apre non fanno cadere il configuratore.
+- Se il configuratore si chiude comunque, la pagina lo dice subito in italiano, disattiva il pulsante e svuota il campo della chiave. Il messaggio dice il vero in ogni caso: se la chiusura avviene durante l’invio avvisa che la chiave potrebbe essere stata salvata e chiede all’agente di verificare; se il collegamento è stato completato in un’altra scheda, mostra il collegamento riuscito.
 
-**Video più visibile.** In cima alla guida c’è il video di 29 secondi su come creare la chiave, con il link alla guida online; anche «Serve aiuto?» porta a quella guida. La pagina accetta immagini e video soltanto da `futuriamarketing.com`.
+**Pagina più semplice.** La pagina mostra solo il modulo. Accanto a ciascun campo c’è un pulsante di aiuto, «Dove trovo il link?» e «Scopri dove trovare questa chiave», che apre una finestra di guida. Quella della chiave contiene il video di 29 secondi, i tre passaggi con le schermate, il pulsante «Apri Futuria CRM» e il link alla guida online. All’apertura la pagina non fa richieste esterne: anteprima e video arrivano da `futuriamarketing.com` solo quando il cliente apre la guida della chiave, e la pagina accetta soltanto quei due file.
 
 ## 1.3.1 — 2026-11-02
 

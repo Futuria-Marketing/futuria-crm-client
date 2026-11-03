@@ -13,6 +13,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import {
   accountNameFromPayload,
   isValidPrivateKey,
+  parseArgs,
   parseLocationInput,
   runChild,
   startWizard,
@@ -20,9 +21,18 @@ import {
 } from "../skills/futuria-crm/scripts/credential-wizard.mjs";
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
-const WIZARD_SCRIPT = join(TEST_DIR, "..", "skills", "futuria-crm", "scripts", "credential-wizard.mjs");
-const APP_SCRIPT = join(TEST_DIR, "..", "skills", "futuria-crm", "scripts", "credential-wizard", "app.js");
+const SCRIPTS_DIR = join(TEST_DIR, "..", "skills", "futuria-crm", "scripts");
+const WIZARD_SCRIPT = join(SCRIPTS_DIR, "credential-wizard.mjs");
+const LAUNCHER_PS1 = join(SCRIPTS_DIR, "launch-credential-setup.ps1");
+const APP_SCRIPT = join(SCRIPTS_DIR, "credential-wizard", "app.js");
+const STYLES = join(SCRIPTS_DIR, "credential-wizard", "styles.css");
 const PREVIEW_KEY = "pit-preview-key-1234567890";
+const VIDEO_URL = "https://futuriamarketing.com/assets/ai/futuria-crm/creare-token-pit-agents.mp4";
+const POSTER_URL = "https://futuriamarketing.com/assets/ai/futuria-crm/creare-token-pit-agents.webp";
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+}
 
 async function openSession(url) {
   const response = await fetch(url);
@@ -93,10 +103,33 @@ async function waitFor(check, timeoutMs) {
   return false;
 }
 
-async function statusOk(url) {
+// Battito come quello della pagina: con il cookie di sessione.
+async function statusOk(url, cookie) {
   try {
-    const response = await fetch(new URL("status", url), { signal: AbortSignal.timeout(2000) });
+    const response = await fetch(new URL("status", url), {
+      headers: cookie ? { Cookie: cookie.split(";", 1)[0] } : {},
+      signal: AbortSignal.timeout(2000),
+    });
     return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function pageOk(url) {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(2000) });
+    await response.arrayBuffer();
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
   } catch {
     return false;
   }
@@ -141,8 +174,10 @@ test("il server locale usa sessione, cookie e CSRF e completa solo la preview", 
   assert.equal(pageResponse.status, 200);
   const csp = pageResponse.headers.get("content-security-policy");
   assert.match(csp, /default-src 'none'/);
-  assert.match(csp, /img-src 'self' https:\/\/futuriamarketing\.com;/);
-  assert.match(csp, /media-src https:\/\/futuriamarketing\.com;/);
+  // Solo i due file della guida video, non l’intero dominio.
+  assert.match(csp, new RegExp(`img-src 'self' ${escapeRegExp(POSTER_URL)};`));
+  assert.match(csp, new RegExp(`media-src ${escapeRegExp(VIDEO_URL)};`));
+  assert.doesNotMatch(csp, /https:\/\/futuriamarketing\.com[;\s]/);
   assert.match(csp, /connect-src 'self';/);
   assert.match(csp, /script-src 'self';/);
   assert.match(pageResponse.headers.get("cache-control"), /no-store/);
@@ -190,54 +225,181 @@ test("il server locale usa sessione, cookie e CSRF e completa solo la preview", 
   assert.equal(JSON.stringify(result).includes("pit-preview"), false);
 });
 
-test("la pagina mostra il video della guida prima dei passaggi e l’avviso di chiusura", async (t) => {
+test("la pagina è solo il modulo, con un pulsante di aiuto accanto a ogni campo", async (t) => {
   const { server, url } = await startWizard({ preview: true, noOpen: true, port: 0 });
   t.after(() => new Promise((resolve) => server.close(resolve)));
 
   const { html } = await openSession(url);
-  assert.match(html, /<video[^>]*\scontrols[\s>]/);
-  assert.match(html, /<video[^>]*\spreload="none"/);
-  assert.match(html, /<video[^>]*\splaysinline[\s>]/);
-  assert.match(html, /poster="https:\/\/futuriamarketing\.com\/assets\/ai\/futuria-crm\/creare-token-pit-agents\.webp"/);
-  assert.match(html, /<source src="https:\/\/futuriamarketing\.com\/assets\/ai\/futuria-crm\/creare-token-pit-agents\.mp4" type="video\/mp4">/);
-  assert.ok(html.indexOf("<video") < html.indexOf('id="guide-accordion"'), "il video precede la guida a fisarmonica");
-  assert.match(html, /href="https:\/\/futuriamarketing\.com\/supporto\/come-creare-token-pit-futuria-crm\/"[^>]*>Il video non parte\?/);
-  assert.match(html, /href="https:\/\/futuriamarketing\.com\/supporto\/come-creare-token-pit-futuria-crm\/"[^>]*>Serve aiuto\?<\/a>/);
-  assert.match(html, /Il configuratore si è chiuso\. La chiave non è stata salvata\. Chiedi all’agente di riaprirlo e incolla di nuovo la chiave\./);
 
-  const app = readFileSync(APP_SCRIPT, "utf8");
-  assert.match(app, /fetch\("status"/);
-  assert.match(app, /HEARTBEAT_MS = 60 \* 1000/);
+  // La colonna della guida non c’è più.
+  assert.doesNotMatch(html, /guide-panel|guide-accordion|<details/);
+  assert.match(html, /<form id="credential-form"/);
+
+  // I due pulsanti di aiuto stanno accanto all’etichetta del rispettivo campo.
+  assert.match(html, /<label for="account-link">Link dell’account<\/label>\s*<button class="help-button" id="link-help-button" type="button" aria-haspopup="dialog" aria-controls="link-guide">/);
+  assert.match(html, /<label for="private-key">Chiave privata di collegamento<\/label>\s*<button class="help-button" id="key-help-button" type="button" aria-haspopup="dialog" aria-controls="key-guide">/);
+  assert.match(html, /<span>Dove trovo il link\?<\/span>/);
+  assert.match(html, /<span>Scopri dove trovare questa chiave<\/span>/);
+  assert.match(html, /<svg class="help-icon"[^>]*aria-hidden="true"/);
+
+  // Le due finestre di guida sono <dialog> nativi con titolo e chiusura.
+  assert.match(html, /<dialog class="guide-dialog" id="link-guide" aria-labelledby="link-guide-title"/);
+  assert.match(html, /<dialog class="guide-dialog" id="key-guide" aria-labelledby="key-guide-title"/);
+  assert.equal((html.match(/<dialog /g) ?? []).length, 2);
+  assert.equal((html.match(/data-close-dialog aria-label="Chiudi la guida"/g) ?? []).length, 2);
+
+  // Guida del link: passi brevi con l’esempio dell’indirizzo.
+  const linkGuide = html.slice(html.indexOf('id="link-guide"'), html.indexOf('id="key-guide"'));
+  assert.match(linkGuide, /Apri Futuria CRM/);
+  assert.match(linkGuide, /Entra nel tuo account/);
+  assert.match(linkGuide, /barra del browser/);
+  assert.match(linkGuide, /https:\/\/app\.futuriamarketing\.com\/v2\/location\/\.\.\./);
+
+  // Guida della chiave: spazio per il video in alto, poi i tre passi con le
+  // immagini locali, il pulsante per aprire il CRM e la guida online.
+  const keyGuide = html.slice(html.indexOf('id="key-guide"'));
+  assert.match(keyGuide, /id="key-video-slot"/);
+  assert.ok(keyGuide.indexOf('id="key-video-slot"') < keyGuide.indexOf("step-1-private-integrations.png"), "il video precede i passi");
+  for (const image of ["step-1-private-integrations.png", "step-2-integration-details.png", "step-3-paste-here.png"]) {
+    assert.match(keyGuide, new RegExp(`<img src="assets/${escapeRegExp(image)}"`));
+  }
+  assert.match(keyGuide, /seleziona <strong>tutti gli ambiti disponibili<\/strong>/);
+  assert.match(keyGuide, /<a class="secondary-action" href="https:\/\/app\.futuriamarketing\.com\/"[^>]*>Apri Futuria CRM<\/a>/);
+  assert.match(keyGuide, /href="https:\/\/futuriamarketing\.com\/supporto\/come-creare-token-pit-futuria-crm\/"[^>]*>Apri la guida online<\/a>/);
+  assert.doesNotMatch(html, /campo protetto a destra/);
+
+  // Nessuna risorsa esterna nel markup iniziale: il video nasce solo
+  // all’apertura della finestra della chiave.
+  assert.doesNotMatch(html, /<video/);
+  assert.doesNotMatch(html, /creare-token-pit-agents/);
+  assert.doesNotMatch(html, /\s(?:src|poster|srcset)="https?:/);
+
+  assert.match(html, /href="https:\/\/futuriamarketing\.com\/supporto\/come-creare-token-pit-futuria-crm\/"[^>]*>Serve aiuto\?<\/a>/);
+  assert.match(html, /Il configuratore si è chiuso: da questa pagina non è stata salvata nessuna chiave\./);
+  assert.doesNotMatch(html, /La chiave non è stata salvata\./);
+
+  const styles = readFileSync(STYLES, "utf8");
+  assert.doesNotMatch(styles, /\.guide-panel|\.accordion|\.video-guide/);
+  assert.match(styles, /\.guide-dialog::backdrop/);
+  assert.match(styles, /\.dialog-body \{[^}]*overflow-y: auto/);
 });
 
-test("status risponde solo con host e sessione validi", async (t) => {
+test("lo script della pagina carica il video solo nella finestra della chiave", () => {
+  const app = readFileSync(APP_SCRIPT, "utf8");
+  assert.match(app, new RegExp(`const VIDEO_SRC = "${escapeRegExp(VIDEO_URL)}";`));
+  assert.match(app, new RegExp(`const VIDEO_POSTER = "${escapeRegExp(POSTER_URL)}";`));
+  assert.match(app, /video\.preload = "none";/);
+  assert.match(app, /video\.controls = true;/);
+  // Il video si monta all’apertura della finestra della chiave e si ferma
+  // (e viene tolto) alla chiusura.
+  assert.match(app, /dialog: document\.getElementById\("key-guide"\),\s*onOpen: mountVideo,\s*onClose: unmountVideo,/);
+  assert.match(app, /video\.pause\(\);/);
+  assert.match(app, /dialog\.showModal\(\);/);
+  assert.match(app, /if \(event\.target === dialog\) dialog\.close\(\);/);
+  assert.match(app, /dialog\.addEventListener\("close", \(\) => \{\s*onClose\?\.\(\);\s*button\.focus\(\);/);
+
+  // Battito solo con la scheda in vista.
+  assert.match(app, /fetch\("status"/);
+  assert.match(app, /HEARTBEAT_MS = 60 \* 1000/);
+  assert.match(app, /document\.visibilityState !== "visible"\) return;/);
+
+  // Messaggi di chiusura veri in ogni caso.
+  assert.match(app, /la chiave potrebbe essere stata salvata oppure no\. Chiedi all’agente di verificare/);
+  assert.match(app, /showServerClosed\("uncertain"\)/);
+  assert.match(app, /new BroadcastChannel\(/);
+  assert.match(app, /Collegamento completato in un’altra scheda/);
+});
+
+test("status richiede host, sessione e cookie validi", async (t) => {
   const { server, url } = await startWizard({ preview: true, noOpen: true, port: 0 });
   t.after(() => new Promise((resolve) => server.close(resolve)));
+  const { cookie } = await openSession(url);
 
-  const response = await fetch(new URL("status", url));
+  const response = await fetch(new URL("status", url), { headers: { Cookie: cookie.split(";", 1)[0] } });
   assert.equal(response.status, 200);
   assert.match(response.headers.get("cache-control"), /no-store/);
   assert.deepEqual(await response.json(), { ok: true });
+
+  assert.equal((await fetch(new URL("status", url))).status, 403);
+  assert.equal((await fetch(new URL("status", url), { headers: { Cookie: "futuria_setup=sbagliato" } })).status, 403);
 
   const origin = new URL(url).origin;
   assert.equal((await fetch(`${origin}/altra-sessione/status`)).status, 404);
   assert.equal(await getWithHost(new URL("status", url).href, `localhost:${new URL(url).port}`), 400);
 });
 
-test("la sessione si chiude dopo l’inattività e ogni richiesta valida la rinnova", async (t) => {
+test("due anteprime aperte insieme non si sovrascrivono il cookie", async (t) => {
+  const first = await startWizard({ preview: true, noOpen: true, port: 0 });
+  t.after(() => new Promise((resolve) => first.server.close(resolve)));
+  const second = await startWizard({ preview: true, noOpen: true, port: 0 });
+  t.after(() => new Promise((resolve) => second.server.close(resolve)));
+
+  const cookieA = (await openSession(first.url)).cookie.split(";", 1)[0];
+  const cookieB = (await openSession(second.url)).cookie.split(";", 1)[0];
+  // Il browser li conserva entrambi per 127.0.0.1 e li invia insieme.
+  assert.notEqual(cookieA.split("=")[0], cookieB.split("=")[0]);
+  const jar = `${cookieA}; ${cookieB}`;
+  const status = async (url, cookieHeader) => (await fetch(new URL("status", url), { headers: { Cookie: cookieHeader } })).status;
+  assert.equal(await status(first.url, jar), 200);
+  assert.equal(await status(second.url, jar), 200);
+  assert.equal(await status(first.url, cookieB), 403);
+});
+
+test("la sessione si chiude dopo l’inattività e il battito con il cookie la rinnova", async (t) => {
   const { server, url } = await startWizard({ preview: true, noOpen: true, port: 0, idleTimeoutMs: 1000 });
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const closed = once(server, "close");
+  const { cookie } = await openSession(url);
 
   await sleep(400);
-  assert.equal(await statusOk(url), true);
+  assert.equal(await statusOk(url, cookie), true);
   await sleep(700);
   // Senza il rinnovo la sessione sarebbe scaduta a 1000 ms.
   assert.equal(server.listening, true);
 
   const outcome = await Promise.race([closed.then(() => "closed"), sleep(5000).then(() => "timeout")]);
   assert.equal(outcome, "closed");
-  assert.equal(await statusOk(url), false);
+  assert.equal(await statusOk(url, cookie), false);
+});
+
+test("richieste senza cookie e file statici non rinnovano la sessione", async (t) => {
+  const started = Date.now();
+  const { server, url } = await startWizard({ preview: true, noOpen: true, port: 0, idleTimeoutMs: 2000 });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const closed = once(server, "close").then(() => Date.now() - started);
+
+  await sleep(1200);
+  assert.equal((await fetch(new URL("status", url))).status, 403);
+  const asset = await fetch(new URL("app.js", url));
+  assert.equal(asset.status, 200);
+  await asset.arrayBuffer();
+
+  const elapsed = await Promise.race([closed, sleep(6000).then(() => Infinity)]);
+  // Con il rinnovo si chiuderebbe intorno a 3200 ms.
+  assert.ok(elapsed < 2900, `chiuso dopo ${elapsed} ms`);
+});
+
+test("il limite assoluto chiude il server anche con il battito attivo", async (t) => {
+  const started = Date.now();
+  const { server, url } = await startWizard({
+    preview: true,
+    noOpen: true,
+    port: 0,
+    idleTimeoutMs: 10_000,
+    maxLifetimeMs: 1200,
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  let closedAt = 0;
+  server.once("close", () => { closedAt = Date.now() - started; });
+  const { cookie } = await openSession(url);
+
+  const deadline = Date.now() + 6000;
+  while (!closedAt && Date.now() < deadline) {
+    await statusOk(url, cookie);
+    await sleep(200);
+  }
+  assert.ok(closedAt > 0, "il server deve chiudersi");
+  assert.ok(closedAt >= 1100 && closedAt < 4000, `chiuso dopo ${closedAt} ms`);
 });
 
 test("dopo un collegamento riuscito il server si chiude da solo", async (t) => {
@@ -267,7 +429,14 @@ test("errori interni e richieste malformate non fanno cadere il server", async (
   const malformed = await rawRequest(port, "QUESTA NON È UNA RICHIESTA HTTP\r\n\r\n");
   assert.match(malformed, /^HTTP\/1\.1 400/);
 
-  assert.equal(await statusOk(url), true);
+  const { cookie } = await openSession(url);
+  assert.equal(await statusOk(url, cookie), true);
+});
+
+test("--result-file si accetta solo con --detach", () => {
+  assert.equal(parseArgs(["--detach", "--result-file", "esito.json"]).resultFile, "esito.json");
+  assert.throws(() => parseArgs(["--result-file", "esito.json"]), /soltanto con --detach/);
+  assert.throws(() => parseArgs(["--detach", "--result-file"]), /file/);
 });
 
 test("runChild non cade se il processo chiude l’input in anticipo", async () => {
@@ -277,12 +446,15 @@ test("runChild non cade se il processo chiude l’input in anticipo", async () =
   );
 });
 
-test("--detach avvia un processo separato e il padre esce subito", async (t) => {
+test("--detach attende il configuratore in ascolto, stampa l’indirizzo e il padre esce", async (t) => {
   const port = await freePort();
   const url = `http://127.0.0.1:${port}/preview/`;
+  const directory = mkdtempSync(join(tmpdir(), "futuria-detach-test-"));
+  const resultFile = join(directory, "esito.json");
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
   const launch = spawnSync(
     process.execPath,
-    [WIZARD_SCRIPT, "--detach", "--preview", "--no-open", "--port", String(port)],
+    [WIZARD_SCRIPT, "--detach", "--preview", "--no-open", "--port", String(port), "--result-file", resultFile],
     { encoding: "utf8", timeout: 15000 },
   );
   assert.equal(launch.error, undefined, "il padre non deve restare in attesa del figlio");
@@ -292,15 +464,71 @@ test("--detach avvia un processo separato e il padre esce subito", async (t) => 
   t.after(() => {
     try { process.kill(pid); } catch { /* già chiuso */ }
   });
+  assert.ok(launch.stdout.includes(`disponibile su ${url}`), launch.stdout);
+  assert.deepEqual(JSON.parse(readFileSync(resultFile, "utf8")), { ok: true, pid, url });
 
-  assert.equal(await waitFor(() => statusOk(url), 10000), true, "il configuratore staccato risponde");
+  // Quando il padre esce il configuratore è già in ascolto: nessuna attesa.
+  assert.equal(await pageOk(url), true, "il configuratore staccato risponde subito");
 
   const { cookie, csrf } = await openSession(url);
+  assert.equal(await statusOk(url, cookie), true);
   const accepted = await previewConnect(url, cookie, csrf);
   assert.equal(accepted.status, 200);
   assert.equal((await accepted.json()).ok, true);
 
-  assert.equal(await waitFor(async () => !(await statusOk(url)), 15000), true, "il configuratore si chiude dopo il collegamento");
+  assert.equal(await waitFor(async () => !(await pageOk(url)), 15000), true, "il configuratore si chiude dopo il collegamento");
+  assert.equal(await waitFor(() => !processAlive(pid), 10000), true, "il processo staccato termina");
+});
+
+test("--detach esce con errore se il configuratore non può mettersi in ascolto", async (t) => {
+  const blocker = createNetServer();
+  await new Promise((resolve) => blocker.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => blocker.close(resolve)));
+  const { port } = blocker.address();
+  const directory = mkdtempSync(join(tmpdir(), "futuria-detach-test-"));
+  const resultFile = join(directory, "esito.json");
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+
+  const launch = spawnSync(
+    process.execPath,
+    [WIZARD_SCRIPT, "--detach", "--preview", "--no-open", "--port", String(port), "--result-file", resultFile],
+    { encoding: "utf8", timeout: 15000 },
+  );
+  assert.equal(launch.error, undefined);
+  assert.equal(launch.status, 1, launch.stdout);
+  assert.match(launch.stderr, /Impossibile avviare il configuratore: .*EADDRINUSE/);
+  assert.doesNotMatch(launch.stdout, /disponibile|aperto nel browser/);
+  const result = JSON.parse(readFileSync(resultFile, "utf8"));
+  assert.equal(result.ok, false);
+  assert.match(result.message, /EADDRINUSE/);
+});
+
+test("il launcher Windows avvia il configuratore via WMI e ne comunica l’indirizzo", {
+  skip: process.platform !== "win32",
+}, async (t) => {
+  const launch = spawnSync(
+    "powershell.exe",
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", LAUNCHER_PS1, "-Preview", "-NoOpen"],
+    { encoding: "utf8", timeout: 60000 },
+  );
+  assert.equal(launch.error, undefined);
+  assert.equal(launch.status, 0, launch.stderr);
+  // Il ripiego su Start-Process va segnalato: qui WMI deve funzionare.
+  assert.doesNotMatch(launch.stdout, /senza WMI/);
+  const match = launch.stdout.match(/disponibile su (http:\/\/127\.0\.0\.1:\d+\/preview\/) \(processo separato, PID (\d+)\)/);
+  assert.ok(match, launch.stdout);
+  const [, url, pidText] = match;
+  const pid = Number(pidText);
+  t.after(() => {
+    try { process.kill(pid); } catch { /* già chiuso */ }
+  });
+
+  const { cookie, csrf } = await openSession(url);
+  assert.equal(await statusOk(url, cookie), true);
+  const accepted = await previewConnect(url, cookie, csrf);
+  assert.equal(accepted.status, 200);
+  assert.equal((await accepted.json()).ok, true);
+  assert.equal(await waitFor(() => !processAlive(pid), 15000), true, "il configuratore termina dopo il collegamento");
 });
 
 test("macOS accetta il salvataggio Keychain dalla pipe senza segreti negli argomenti", {

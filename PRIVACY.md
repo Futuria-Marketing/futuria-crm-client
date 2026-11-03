@@ -39,7 +39,7 @@ Riferimenti dei fornitori:
 - **macOS:** la chiave privata viene salvata nel Portachiavi di macOS.
 - L’identificativo dell’account viene salvato in un piccolo file di configurazione locale.
 - Il configuratore grafico viene servito temporaneamente soltanto su `127.0.0.1`; non invia telemetria e non conserva la chiave nei log o nella cache del browser.
-- La guida video del configuratore viene caricata da `futuriamarketing.com`: all’apertura il browser scarica l’immagine di anteprima e, solo se l’utente preme play, il video. Nessun dato inserito nel configuratore viene inviato con queste richieste.
+- All’apertura il configuratore non fa richieste verso l’esterno. Solo se l’utente apre la guida della chiave il browser scarica da `futuriamarketing.com` l’immagine di anteprima del video e, se l’utente preme play, il video. Nessun dato inserito nel configuratore viene inviato con queste richieste.
 - Come fallback tecnico, l’utente può scegliere variabili d’ambiente; non sono il percorso consigliato per utenti non tecnici.
 
 ## Controlli dell’utente

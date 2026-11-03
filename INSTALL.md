@@ -61,11 +61,12 @@ Il repository include anche il manifest `.codex-plugin/plugin.json` e il marketp
 
 ## Configurazione grafica protetta
 
-Individuare la cartella installata della skill `futuria-crm`, quindi eseguire il launcher adatto al sistema operativo. Il launcher usa Node.js, già presente nella maggior parte degli ambienti Codex e Claude Code, per aprire una pagina raggiungibile soltanto su `127.0.0.1`. Il launcher avvia il configuratore in un processo separato e termina subito; la pagina resta attiva finché è aperta e si chiude da sola dopo il collegamento o dopo 45 minuti di inattività.
+Individuare la cartella installata della skill `futuria-crm`, quindi eseguire il launcher adatto al sistema operativo. Il launcher usa Node.js, già presente nella maggior parte degli ambienti Codex e Claude Code, per aprire una pagina raggiungibile soltanto su `127.0.0.1`. Il launcher avvia il configuratore in un processo separato, attende che sia pronto, stampa l’indirizzo della pagina e termina; se il configuratore non parte, lo segnala con un errore. La pagina resta attiva finché è aperta e si chiude da sola dopo il collegamento, dopo 45 minuti di inattività o comunque dopo 3 ore.
 
 La pagina:
 
-- mostra un video breve e una guida visiva in tre passaggi con schermate Futuria CRM;
+- mostra soltanto il modulo con il link dell’account e la chiave privata;
+- accanto a ciascun campo offre una guida in finestra: per il link, dove copiarlo; per la chiave, un video breve e tre passaggi con schermate Futuria CRM;
 - accetta il link completo dell’account ed estrae automaticamente l’ID;
 - verifica la chiave in sola lettura;
 - salva la credenziale con la protezione nativa del sistema operativo;
