@@ -56,9 +56,13 @@ function lines(text) {
   return text.replace(/\r/g, "").trim().split("\n").map((line) => line.trim()).filter(Boolean);
 }
 
-// Il testo di un errore PowerShell va a capo alla larghezza della console.
+// Il testo di un errore PowerShell va a capo alla larghezza della console; pwsh 7
+// aggiunge i colori ANSI e il margine «|» della vista concisa degli errori.
 function flat(text) {
-  return text.replace(/\s+/g, " ");
+  return text
+    .replace(/\x1B\[[0-9;]*m/g, "")
+    .replace(/(^|\s)\|(?=\s)/gm, " ")
+    .replace(/\s+/g, " ");
 }
 
 // ---------------------------------------------------------------------------
