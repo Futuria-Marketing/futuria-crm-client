@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -20,9 +20,16 @@ import {
   startWizard,
   windowsPowerShellEnvironment,
 } from "../skills/futuria-crm/scripts/credential-wizard.mjs";
+import { APP_STORE_TEXT } from "./fixtures/state-config-cases.mjs";
+import {
+  assertPowerShellChildIsolated,
+  createIsolatedState,
+  POWERSHELL,
+  SCRIPTS_DIR,
+  snapshot,
+} from "./helpers/isolated-state.mjs";
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
-const SCRIPTS_DIR = join(TEST_DIR, "..", "skills", "futuria-crm", "scripts");
 const WIZARD_SCRIPT = join(SCRIPTS_DIR, "credential-wizard.mjs");
 const LAUNCHER_PS1 = join(SCRIPTS_DIR, "launch-credential-setup.ps1");
 const APP_SCRIPT = join(SCRIPTS_DIR, "credential-wizard", "app.js");
@@ -742,66 +749,73 @@ test("macOS accetta il salvataggio Keychain dalla pipe senza segreti negli argom
 
 test("Windows salva dalla pipe con DPAPI senza esporre la chiave", {
   skip: process.platform !== "win32",
-}, () => {
-  const directory = mkdtempSync(join(tmpdir(), "futuria-dpapi-test-"));
-  const setupScript = join(
-    process.cwd(),
-    "skills",
-    "futuria-crm",
-    "scripts",
-    "setup-credentials.ps1",
-  );
+}, (t) => {
+  // APPDATA, USERPROFILE e HOME temporanei: la cartella reale della skill e
+  // quella dell’app desktop non vengono mai toccate.
+  const state = createIsolatedState(t);
+  assertPowerShellChildIsolated(state);
+  const setupScript = join(SCRIPTS_DIR, "setup-credentials.ps1");
   const environment = windowsPowerShellEnvironment({
-    ...process.env,
-    APPDATA: directory,
+    ...state.env,
     PSModulePath: "C:\\Program Files\\PowerShell\\Modules",
   });
   assert.equal(
     Object.keys(environment).some((key) => key.toLowerCase() === "psmodulepath"),
     false,
   );
+  // Lo store dell’app desktop nella sua cartella deve restare identico.
+  mkdirSync(state.windows.legacyDir, { recursive: true });
+  writeFileSync(join(state.windows.legacyDir, "config.json"), APP_STORE_TEXT);
+  const appBefore = snapshot(state.windows.legacyDir);
 
-  try {
-    const store = spawnSync(
-      "powershell.exe",
-      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", setupScript, "-FromStdin"],
-      {
-        input: "demoAccount1234567890\npit-preview-dpapi-1234567890\n",
-        encoding: "utf8",
-        env: environment,
-      },
-    );
-    assert.equal(store.status, 0, store.stderr);
-    assert.equal(store.stdout.includes("pit-preview"), false);
+  const store = spawnSync(
+    POWERSHELL,
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", setupScript, "-FromStdin"],
+    {
+      input: "demoAccount1234567890\npit-preview-dpapi-1234567890\n",
+      encoding: "utf8",
+      env: environment,
+    },
+  );
+  assert.equal(store.status, 0, store.stderr);
+  assert.equal(store.stdout.includes("pit-preview"), false);
 
-    const status = spawnSync(
-      "powershell.exe",
-      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", setupScript, "-Status"],
-      { encoding: "utf8", env: environment },
-    );
-    assert.equal(status.status, 0, status.stderr);
-    assert.match(status.stdout, /Chiave privata protetta: presente/);
-    assert.equal(status.stdout.includes("pit-preview"), false);
+  const status = spawnSync(
+    POWERSHELL,
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", setupScript, "-Status"],
+    { encoding: "utf8", env: environment },
+  );
+  assert.equal(status.status, 0, status.stderr);
+  assert.match(status.stdout, /Chiave privata protetta: presente/);
+  assert.match(status.stdout, /ID account: presente/);
+  assert.equal(status.stdout.includes("pit-preview"), false);
 
-    const credentialPath = join(directory, "Futuria CRM", "credential.xml");
-    const readEnvironment = { ...environment, FUTURIA_TEST_CREDENTIAL_PATH: credentialPath };
-    const read = spawnSync(
-      "powershell.exe",
-      [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "$c=Import-Clixml -LiteralPath $env:FUTURIA_TEST_CREDENTIAL_PATH; [Console]::Out.Write($c.GetNetworkCredential().Password)",
-      ],
-      { encoding: "utf8", env: readEnvironment },
-    );
-    assert.equal(read.status, 0, read.stderr);
-    assert.equal(read.stdout, "pit-preview-dpapi-1234567890");
+  const credentialPath = join(state.windows.stateDir, "credential.xml");
+  const readEnvironment = { ...environment, FUTURIA_TEST_CREDENTIAL_PATH: credentialPath };
+  const read = spawnSync(
+    POWERSHELL,
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "$c=Import-Clixml -LiteralPath $env:FUTURIA_TEST_CREDENTIAL_PATH; [Console]::Out.Write($c.GetNetworkCredential().Password)",
+    ],
+    { encoding: "utf8", env: readEnvironment },
+  );
+  assert.equal(read.status, 0, read.stderr);
+  assert.equal(read.stdout, "pit-preview-dpapi-1234567890");
 
-    const config = JSON.parse(readFileSync(join(directory, "Futuria CRM", "config.json"), "utf8"));
-    assert.equal(config.location, "demoAccount1234567890");
-    assert.equal(config.storage, "windows-dpapi");
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+  const config = JSON.parse(readFileSync(join(state.windows.stateDir, "config.json"), "utf8"));
+  assert.equal(config.location, "demoAccount1234567890");
+  assert.equal(config.storage, "windows-dpapi");
+  assert.match(config.updated_at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{7}Z$/);
+  assert.deepEqual(snapshot(state.windows.legacyDir), appBefore);
+});
+
+test("la schermata del passo 3 è quella nuova, esportata a 2×", () => {
+  const image = readFileSync(join(SCRIPTS_DIR, "credential-wizard", "assets", "step-3-paste-here.png"));
+  // Intestazione PNG e blocco IHDR: larghezza e altezza in big-endian.
+  assert.equal(image.subarray(1, 4).toString("latin1"), "PNG");
+  assert.equal(image.subarray(12, 16).toString("latin1"), "IHDR");
+  assert.deepEqual([image.readUInt32BE(16), image.readUInt32BE(20)], [1400, 720]);
 });

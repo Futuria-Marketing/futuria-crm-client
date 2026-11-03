@@ -14,12 +14,12 @@ jobs:
         with:
           python-version: "3.12"
       - name: Valida script macOS
-        run: bash -n skills/futuria-crm/scripts/setup-credentials.sh skills/futuria-crm/scripts/launch-credential-setup.sh skills/futuria-crm/scripts/crm-api.sh
+        run: bash -n skills/futuria-crm/scripts/setup-credentials.sh skills/futuria-crm/scripts/launch-credential-setup.sh skills/futuria-crm/scripts/crm-api.sh skills/futuria-crm/scripts/state-dir.sh
       - name: Valida script PowerShell
         shell: pwsh
         run: |
           $failed = $false
-          foreach ($file in @('skills/futuria-crm/scripts/setup-credentials.ps1', 'skills/futuria-crm/scripts/launch-credential-setup.ps1', 'skills/futuria-crm/scripts/crm-api.ps1')) {
+          foreach ($file in @('skills/futuria-crm/scripts/setup-credentials.ps1', 'skills/futuria-crm/scripts/launch-credential-setup.ps1', 'skills/futuria-crm/scripts/crm-api.ps1', 'skills/futuria-crm/scripts/state-dir.ps1')) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile($file, [ref]$tokens, [ref]$errors) | Out-Null
@@ -33,16 +33,26 @@ jobs:
         run: python scripts/validate-plugin.py
 
   credential-wizard:
-    name: credential-wizard (${{ matrix.os }})
+    name: credential-wizard (${{ matrix.os }}, Node ${{ matrix.node }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        # Versione minima dichiarata in INSTALL.md e versione attuale.
+        node: ["20", "24"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-      - name: Test configuratore locale
-        run: node --test tests/credential-wizard.test.mjs
+          node-version: ${{ matrix.node }}
+      - name: Sintassi Bash 3.2 di macOS
+        if: runner.os == 'macOS'
+        run: for file in skills/futuria-crm/scripts/*.sh; do /bin/bash -n "$file"; done
+      - name: Test configuratore e cartella di stato
+        run: node --test tests/credential-wizard.test.mjs tests/state-dir.test.mjs
+      - name: Test PowerShell con pwsh 7
+        if: runner.os == 'Windows'
+        env:
+          FUTURIA_TEST_POWERSHELL: pwsh
+        run: node --test tests/state-dir.test.mjs

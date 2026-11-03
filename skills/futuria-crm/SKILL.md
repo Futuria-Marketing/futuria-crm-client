@@ -32,6 +32,7 @@ When in doubt about wording, load `references/terminology-and-voice.md`. It carr
   2. **Web interface** — only for builder-only internals the API does not expose, or to visually confirm something for the user.
 - The initial release does not install or require an MCP connector. If a future chat edition exposes Futuria CRM tools, follow that edition's own connection contract instead of mixing the two channels.
 - If credentials are missing, do not dead-end: guide the user through protected setup in plain Italian — see `references/getting-started.md`.
+- If the API helper stops with `[futuria-crm:id-mancante]`, or the status check prints `Serve ricollegare l'account`, the private key is present but the account id is missing: open the configurator once so the user connects the account again; do not retry API reads first. Other coded helper messages are in `references/api-and-troubleshooting.md`.
 - Updates are never silent. Before a new setup or when the user asks about updates, read the local `VERSION`, compare it with the latest stable GitHub Release and offer an upgrade only if the installed copy is recognised and unmodified.
 
 ## 3. Fast start

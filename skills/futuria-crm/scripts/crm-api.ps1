@@ -13,27 +13,43 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$stateDir = Join-Path $env:APPDATA "Futuria CRM"
-$credentialPath = Join-Path $stateDir "credential.xml"
-$configPath = Join-Path $stateDir "config.json"
+# Messaggi solo ASCII: questo file non ha BOM e li legge l'agente.
+. (Join-Path $PSScriptRoot "state-dir.ps1")
 
 $location = @($env:FUTURIA_CRM_LOCATION, $env:FUTURIA_CRM_LOCATION_ID) |
     Where-Object { $_ } | Select-Object -First 1
-if (-not $location -and (Test-Path -LiteralPath $configPath)) {
-    $location = (Get-Content -Raw -Encoding UTF8 -LiteralPath $configPath | ConvertFrom-Json).location
-}
-
 $token = $env:FUTURIA_CRM_TOKEN
-if (-not $token -and (Test-Path -LiteralPath $credentialPath)) {
-    $stored = Import-Clixml -LiteralPath $credentialPath
-    if ($stored -isnot [System.Management.Automation.PSCredential]) {
-        throw "Archivio credenziali Futuria CRM non valido."
+$keyState = "mancante"
+if ($token) { $keyState = "presente" }
+
+# Le variabili d'ambiente hanno la precedenza; la cartella della skill si
+# consulta solo per il valore che manca.
+if (-not $token -or -not $location) {
+    $state = Resolve-FuturiaState
+    if (-not $location -and $null -ne $state.Config) {
+        $location = $state.Config.location
     }
-    $token = $stored.GetNetworkCredential().Password
+    if (-not $token) {
+        $keyState = $state.CredentialState
+        if ($keyState -ceq "presente") {
+            $token = $state.Credential.GetNetworkCredential().Password
+        }
+    }
+    $state = $null
 }
 
-if (-not $token -or -not $location) {
-    throw "Credenziali Futuria CRM mancanti. Esegui prima setup-credentials.ps1 in una finestra separata."
+if ($keyState -ceq "non-leggibile") {
+    throw "[futuria-crm:chiave-non-leggibile] Chiave privata presente ma non leggibile per questo utente Windows: ricollega l'account con launch-credential-setup.ps1."
+}
+if (-not $token -and -not $location) {
+    throw "[futuria-crm:credenziali-mancanti] Credenziali Futuria CRM mancanti. Avvia il configuratore con launch-credential-setup.ps1."
+}
+if (-not $location) {
+    $token = $null
+    throw "[futuria-crm:id-mancante] Configurazione Futuria CRM incompleta: chiave privata presente, ID account mancante. Riapri il configuratore con launch-credential-setup.ps1 e ricollega l'account."
+}
+if (-not $token) {
+    throw "[futuria-crm:chiave-mancante] Configurazione Futuria CRM incompleta: ID account presente, chiave privata mancante. Riapri il configuratore con launch-credential-setup.ps1."
 }
 if ($token -notmatch '^pit-[A-Za-z0-9._-]{6,2048}$') {
     throw "La chiave privata configurata non ha il formato atteso."

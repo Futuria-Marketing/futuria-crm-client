@@ -13,9 +13,11 @@ The account uses two distinct values:
 
 Preferred storage:
 
-- Windows: private key encrypted with Windows DPAPI for the current user; account id in local config.
-- macOS: private key in macOS Keychain; account id in local config.
+- Windows: private key encrypted with Windows DPAPI for the current user, plus the account id, in the skill's own folder `%USERPROFILE%\.futuria-crm-skill\`.
+- macOS: private key in macOS Keychain; account id in `~/Library/Application Support/com.futuriamarketing.futuria-crm-skill/config.json`.
 - Linux or automated environments: environment variables as an explicit fallback.
+
+The skill folder is separate from the Futuria CRM desktop app, whose folder (`%APPDATA%\Futuria CRM`, `~/Library/Application Support/Futuria CRM`) versions up to 1.3.2 also used. On the first status check or API call after an update, the helpers copy the skill's own files from that old folder into the new one and never modify the app's files. If the copy is not possible (for example inside a sandbox), they read the old files read-only and retry next time; a copy interrupted halfway is completed on the next run. This needs no action from you or the user.
 
 Never ask the user to paste the private key in chat, a prompt, a shell command, a file in the workspace, or an issue. Never retrieve it merely to inspect or mask it.
 
@@ -27,7 +29,13 @@ The configurator runs in a separate process (on Windows it is created outside th
 
 If the Windows launcher prints a line starting with `Attenzione: configuratore avviato senza WMI`, the configurator could not leave the agent's job and may close when the command ends. If the page then reports that it has closed, run the launcher again outside the sandbox or with elevated permissions.
 
-If the user reports that the page says the configurator has closed, do not assume the outcome: first run the status check below. If the private key is present, run the first sanity read (section 3); run the launcher again only if the key is missing or the read fails.
+If the user reports that the page says the configurator has closed, do not assume the outcome: first run the status check below, then follow the first matching branch:
+
+1. Private key and account id both present: run the first sanity read (section 3); run the launcher again only if the read fails.
+2. Private key present but account id missing (the status prints `Serve ricollegare l'account`): run the launcher once and ask the user to connect the account again. Do not run a sanity read first: without the account id it cannot work. This is expected once after updating to 1.3.3 for users who also use the Futuria CRM desktop app.
+3. Private key missing, or both missing: run the launcher.
+
+If the status says the key is not readable (Windows) or the Keychain is not accessible (macOS), see the message table in `references/api-and-troubleshooting.md` before reconnecting.
 
 If the page says it is no longer connected to the configurator and asks to be reloaded, the user reloads it; if the message stays, run the launcher again.
 
@@ -39,7 +47,7 @@ If the Windows launcher says that PowerShell runs in a restricted mode because o
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<skill-dir>\scripts\launch-credential-setup.ps1"
 ```
 
-Status check, which never returns the private key:
+Status check, which never returns the private key. It checks that the key can really be decrypted for this Windows user and that the account id is valid, prints `Chiave privata protetta: presente|mancante|non leggibile` and `ID account: presente|mancante`, adds `Serve ricollegare l'account` when only the account id is missing, and exits with 0 only when both are valid:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<skill-dir>\scripts\setup-credentials.ps1" -Status
@@ -51,11 +59,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<skill-dir>\scripts\set
 bash "<skill-dir>/scripts/launch-credential-setup.sh"
 ```
 
-Status check:
+Status check, with the same lines as on Windows (the key state can also be `non accessibile` when the Keychain is locked or blocked by a sandbox):
 
 ```bash
 bash "<skill-dir>/scripts/setup-credentials.sh" status
 ```
+
+If the status prints `Un'altra installazione del plugin non aggiornata usa ancora la vecchia cartella`, another agent on the same computer still runs version 1.3.2 or earlier: tell the user to update the plugin there too and restart its sessions.
 
 ### Automatic fallback
 
@@ -65,7 +75,7 @@ Do not install Node.js solely for this wizard without informing the user first.
 
 ### Environment fallback
 
-Advanced users and non-interactive environments may provide `FUTURIA_CRM_TOKEN` plus `FUTURIA_CRM_LOCATION`. The user must set them personally outside the conversation. Do not propose a command containing their real values and do not write them into shell profiles on their behalf.
+Advanced users and non-interactive environments may provide `FUTURIA_CRM_TOKEN` plus `FUTURIA_CRM_LOCATION` (`FUTURIA_CRM_LOCATION_ID` is accepted as an alternative name for the account id). The user must set them personally outside the conversation. Do not propose a command containing their real values and do not write them into shell profiles on their behalf. Environment values take precedence over the protected storage; the helpers read the skill folder only for a value the environment does not provide.
 
 ## 3. First sanity read
 
@@ -112,6 +122,10 @@ macOS:
 ```bash
 bash "<skill-dir>/scripts/setup-credentials.sh" remove
 ```
+
+This removes the copies left by versions up to 1.3.2 in the desktop app's folder, recognised by their structure, and then the skill folder; it never removes the desktop app's own files or that folder. If the desktop app is open, the old copy of the account id stays until the app is closed and the removal is repeated (the output says so); the helpers do not copy it back in the meantime. If the user also uses the desktop app, the account id may remain inside the app's own configuration file, which the skill does not modify.
+
+If the output starts with `[futuria-crm:rimozione-incompleta]`, some files could not be removed (a program is using them, or on macOS the Keychain is locked). When an old copy of the private key or the Keychain entry could not be removed, the skill folder is left as it was, so the state does not change half-way. Ask the user to close the programs or unlock the Keychain, then run the removal again.
 
 This removes only the local copy. Revoking the private key itself is a separate action in the user's Futuria CRM account.
 

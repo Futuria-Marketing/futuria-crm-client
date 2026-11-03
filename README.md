@@ -40,6 +40,7 @@ La pagina è disponibile soltanto sul computer dell’utente. Il configuratore r
 
 - **Windows:** la chiave viene cifrata con Windows DPAPI per l’utente corrente.
 - **macOS:** la chiave viene salvata nel Portachiavi di macOS.
+- La skill usa una cartella tutta sua, separata da quella dell’app desktop Futuria CRM.
 - Se Node.js non è disponibile, il launcher apre automaticamente il precedente prompt protetto in PowerShell o Terminale.
 - Le variabili d’ambiente restano un fallback per utenti tecnici e ambienti automatizzati.
 
