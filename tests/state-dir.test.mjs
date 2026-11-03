@@ -1236,7 +1236,7 @@ test("macOS: il collegamento nel terminale toglie l’ID precedente prima di sal
   writeFileSync(configPath, SKILL_CONFIG_MAC);
   const failed = setup({ FAKE_SECURITY_ADD_RC: "1" });
   assert.notEqual(failed.status, 0);
-  assert.equal(existsSync(configPath), false);
+  assert.equal(existsSync(configPath), false, failed.stdout + failed.stderr);
   assert.deepEqual(listTemps(state.mac.stateDir), []);
 
   // Il collegamento riuscito scrive il nuovo ID.
