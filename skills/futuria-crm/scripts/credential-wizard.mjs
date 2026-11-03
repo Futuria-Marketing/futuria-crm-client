@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir, platform } from "node:os";
-import { dirname, extname, join } from "node:path";
+import { dirname, join, posix as posixPath, win32 as win32Path } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -21,6 +21,15 @@ const SCRIPT_DIR = dirname(SCRIPT_PATH);
 const UI_DIR = join(SCRIPT_DIR, "credential-wizard");
 const SERVICE = "com.futuriamarketing.futuria-crm.pit";
 const ACCOUNT = "default";
+// Cartelle di stato della skill, separate da quella dell’app desktop
+// Futuria CRM. Gli stessi nomi sono in state-dir.ps1 (Windows) e
+// state-dir.sh (macOS): il validatore controlla che coincidano.
+export const WINDOWS_STATE_DIR_NAME = ".futuria-crm-skill";
+export const MAC_STATE_DIR_NAME = "com.futuriamarketing.futuria-crm-skill";
+// Cartella usata fino alla 1.3.2, che è anche quella dell’app desktop.
+const LEGACY_STATE_DIR_NAME = "Futuria CRM";
+const CONFIG_MAX_BYTES = 1024;
+const CONFIG_STORAGE = { win32: "windows-dpapi", darwin: "macos-keychain" };
 const MAX_BODY_BYTES = 16 * 1024;
 // La sessione resta aperta finché la pagina, in vista, dà segni di vita
 // (battito ogni 60 secondi con il cookie di sessione) e si chiude dopo
@@ -193,6 +202,117 @@ export function runChild(command, args, input = "", options = {}) {
   });
 }
 
+// Valore di una variabile d’ambiente: su Windows i nomi non distinguono
+// maiuscole e minuscole.
+function environmentValue(env, name, runtime) {
+  if (runtime !== "win32") return env[name];
+  const key = Object.keys(env).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
+  return key === undefined ? undefined : env[key];
+}
+
+// Percorso assoluto di Windows con lettera di unità (C:\…) oppure UNC
+// (\\server\condivisione\…), senza segmenti «..» né caratteri di controllo.
+// Restano fuori C:foo, \foo, \\?\… e \\.\…: con quei valori la skill
+// scriverebbe rispetto alla cartella corrente o alla radice del disco.
+export function isValidWindowsRoot(value) {
+  if (typeof value !== "string" || !value) return false;
+  if (/[\x00-\x1f]/.test(value)) return false;
+  if (!/^(?:[A-Za-z]:[\\/]|\\\\[^\\/?.][^\\/]*[\\/][^\\/]+)/.test(value)) return false;
+  return !/(?:^|[\\/])\.\.(?:[\\/]|$)/.test(value);
+}
+
+export function isValidPosixHome(value) {
+  if (typeof value !== "string" || value.length < 2 || !value.startsWith("/")) return false;
+  if (/[\x00-\x1f\x7f]/.test(value)) return false;
+  return !`/${value}/`.includes("/../");
+}
+
+function invalidStateDirectory(variable) {
+  const error = new Error(`La cartella ${variable} non è valida: la configurazione Futuria CRM non si può usare.`);
+  error.code = "FUTURIA_STATE_DIR_INVALID";
+  return error;
+}
+
+function posixHome(env, home) {
+  const value = env.HOME ?? home ?? homedir();
+  return typeof value === "string" ? value.replace(/\/+$/, "") || value : value;
+}
+
+// Cartella di stato della skill: %USERPROFILE%\.futuria-crm-skill su Windows,
+// ~/Library/Application Support/com.futuriamarketing.futuria-crm-skill su
+// macOS, nessuna cartella su Linux (solo variabili d’ambiente).
+export function stateDirectory({ platform: runtime = platform(), env = process.env, home } = {}) {
+  if (runtime === "win32") {
+    const root = environmentValue(env, "USERPROFILE", runtime);
+    if (!isValidWindowsRoot(root)) throw invalidStateDirectory("USERPROFILE");
+    return win32Path.join(root, WINDOWS_STATE_DIR_NAME);
+  }
+  if (runtime === "darwin") {
+    const base = posixHome(env, home);
+    if (!isValidPosixHome(base)) throw invalidStateDirectory("HOME");
+    return posixPath.join(base, "Library", "Application Support", MAC_STATE_DIR_NAME);
+  }
+  return null;
+}
+
+// Cartella usata fino alla 1.3.2 (la stessa dell’app desktop), o null se
+// non si può determinare: serve solo a riconoscerne i file della skill.
+export function legacyStateDirectory({ platform: runtime = platform(), env = process.env, home } = {}) {
+  if (runtime === "win32") {
+    const root = environmentValue(env, "APPDATA", runtime);
+    return isValidWindowsRoot(root) ? win32Path.join(root, LEGACY_STATE_DIR_NAME) : null;
+  }
+  if (runtime === "darwin") {
+    const base = posixHome(env, home);
+    return isValidPosixHome(base) ? posixPath.join(base, "Library", "Application Support", LEGACY_STATE_DIR_NAME) : null;
+  }
+  return null;
+}
+
+// Riconosce un config.json della skill sul testo grezzo, con la stessa regola
+// di state-dir.ps1 e state-dir.sh: oggetto JSON con le sole chiavi location,
+// storage e updated_at, valori stringa semplici, nessun duplicato, al massimo
+// 1 KiB. storage deve valere quello della piattaforma; su Windows updated_at è
+// obbligatorio. Restituisce i valori o null; non stampa mai il contenuto.
+export function classifyLegacyConfig(input, { platform: runtime = platform() } = {}) {
+  const expectedStorage = CONFIG_STORAGE[runtime];
+  if (!expectedStorage) return null;
+  const bytes = Buffer.isBuffer(input) ? input : Buffer.from(String(input ?? ""), "utf8");
+  if (bytes.length > CONFIG_MAX_BYTES) return null;
+  let text = bytes.toString("utf8");
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+  const object = /^[ \t\r\n]*\{([\s\S]*)\}[ \t\r\n]*$/.exec(text);
+  if (!object) return null;
+  let body = object[1];
+  const values = new Map();
+  let needPair = false;
+  for (;;) {
+    body = body.replace(/^[ \t\r\n]+/, "");
+    if (!body) {
+      if (needPair) return null;
+      break;
+    }
+    const pair = /^"([A-Za-z_]+)"[ \t\r\n]*:[ \t\r\n]*"([A-Za-z0-9_.:+-]*)"([\s\S]*)$/.exec(body);
+    if (!pair) return null;
+    const [, key, value] = pair;
+    const rest = pair[3].replace(/^[ \t\r\n]+/, "");
+    if (!["location", "storage", "updated_at"].includes(key) || values.has(key)) return null;
+    values.set(key, value);
+    if (!rest) break;
+    if (rest[0] !== ",") return null;
+    body = rest.slice(1);
+    needPair = true;
+  }
+  const location = values.get("location");
+  const updatedAt = values.get("updated_at");
+  if (!/^[A-Za-z0-9_-]{6,128}$/.test(location ?? "")) return null;
+  if (values.get("storage") !== expectedStorage) return null;
+  const isoDate = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,7})?Z$/;
+  if (runtime === "win32" && updatedAt === undefined) return null;
+  if (updatedAt !== undefined && !isoDate.test(updatedAt)) return null;
+  return { location, storage: expectedStorage, updated_at: updatedAt ?? null };
+}
+
 async function storeWindowsCredential(location, privateKey) {
   const setupScript = join(SCRIPT_DIR, "setup-credentials.ps1");
   await runChild(
@@ -203,8 +323,23 @@ async function storeWindowsCredential(location, privateKey) {
   );
 }
 
-async function storeMacCredential(location, privateKey) {
-  const configDir = join(homedir(), "Library", "Application Support", "Futuria CRM");
+// `security -i` riceve il comando dalla pipe: la chiave non compare negli
+// argomenti di processo, nella cronologia della shell o nei log del wizard.
+function writeMacKeychain(privateKey) {
+  return runChild(
+    "/usr/bin/security",
+    ["-i"],
+    `add-generic-password -U -a ${ACCOUNT} -s ${SERVICE} -w ${privateKey}\n`,
+  );
+}
+
+// Salva l’ID account nella cartella della skill e la chiave nel Portachiavi.
+// Non legge e non tocca la cartella dell’app desktop Futuria CRM. I test
+// passano una cartella temporanea e uno scrittore del Portachiavi finto.
+export async function storeMacCredential(location, privateKey, {
+  configDir = stateDirectory({ platform: "darwin", env: process.env, home: homedir() }),
+  writeKeychain = writeMacKeychain,
+} = {}) {
   const configPath = join(configDir, "config.json");
   const tempPath = join(configDir, `.config-${randomBytes(8).toString("hex")}.tmp`);
 
@@ -221,13 +356,8 @@ async function storeMacCredential(location, privateKey) {
   );
 
   try {
-    // `security -i` riceve il comando dalla pipe: la chiave non compare negli
-    // argomenti di processo, nella cronologia della shell o nei log del wizard.
-    await runChild(
-      "/usr/bin/security",
-      ["-i"],
-      `add-generic-password -U -a ${ACCOUNT} -s ${SERVICE} -w ${privateKey}\n`,
-    );
+    await writeKeychain(privateKey);
+    // renameSync sostituisce in modo atomico una configurazione precedente.
     renameSync(tempPath, configPath);
     chmodSync(configPath, 0o600);
   } catch (error) {

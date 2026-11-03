@@ -24,18 +24,69 @@ fi
 location="${FUTURIA_CRM_LOCATION:-${FUTURIA_CRM_LOCATION_ID:-}}"
 token="${FUTURIA_CRM_TOKEN:-}"
 
-if [[ "$(uname -s)" == "Darwin" ]]; then
-  config_file="${HOME}/Library/Application Support/Futuria CRM/config.json"
-  if [[ -z "${location}" && -f "${config_file}" ]]; then
-    location="$(sed -nE 's/.*"location"[[:space:]]*:[[:space:]]*"([A-Za-z0-9_-]+)".*/\1/p' "${config_file}" | head -n 1)"
+# shellcheck source=state-dir.sh
+. "$(dirname -- "${BASH_SOURCE[0]}")/state-dir.sh"
+
+runtime="$(futuria_platform)"
+if [[ "${runtime}" == "windows" ]]; then
+  # Git Bash su Windows: la configurazione protetta e' quella di PowerShell.
+  unset token
+  echo "${FUTURIA_MSG_USE_POWERSHELL}" >&2
+  exit 2
+fi
+
+key_state="mancante"
+if [[ -n "${token}" ]]; then key_state="presente"; fi
+
+# Le variabili d'ambiente hanno la precedenza; su macOS il Portachiavi e la
+# cartella della skill si consultano solo per il valore che manca. Su Linux si
+# usano soltanto le variabili d'ambiente.
+if [[ "${runtime}" == "darwin" && ( -z "${token}" || -z "${location}" ) ]]; then
+  if ! futuria_state_paths; then
+    unset token
+    echo "${FUTURIA_MSG_INVALID_DIR}" >&2
+    exit 3
+  fi
+  if [[ -z "${location}" ]]; then
+    futuria_resolve_location
+    location="${FUTURIA_LOCATION}"
   fi
   if [[ -z "${token}" ]]; then
-    token="$(security find-generic-password -a default -s com.futuriamarketing.futuria-crm.pit -w 2>/dev/null || true)"
+    token_rc=0
+    token="$(security find-generic-password -a "${FUTURIA_KEYCHAIN_ACCOUNT}" -s "${FUTURIA_KEYCHAIN_SERVICE}" -w 2>/dev/null)" || token_rc=$?
+    if (( token_rc == 0 )) && [[ -n "${token}" ]]; then
+      key_state="presente"
+    elif (( token_rc == 44 || token_rc == 0 )); then
+      token=""
+      key_state="mancante"
+    else
+      token=""
+      key_state="non-accessibile"
+    fi
   fi
 fi
 
-if [[ -z "${token}" || -z "${location}" ]]; then
-  echo "Credenziali Futuria CRM mancanti. Esegui prima lo script di configurazione protetta." >&2
+if [[ "${key_state}" == "non-accessibile" ]]; then
+  unset token
+  echo "[futuria-crm:portachiavi-non-accessibile] Portachiavi non accessibile da questo processo: sbloccalo o esegui il comando fuori dalla sandbox." >&2
+  exit 3
+fi
+if [[ "${runtime}" != "darwin" && ( -z "${token}" || -z "${location}" ) ]]; then
+  unset token
+  echo "[futuria-crm:credenziali-mancanti] Credenziali Futuria CRM mancanti. Su Linux imposta FUTURIA_CRM_TOKEN e FUTURIA_CRM_LOCATION in un terminale separato." >&2
+  exit 3
+fi
+if [[ -z "${token}" && -z "${location}" ]]; then
+  echo "[futuria-crm:credenziali-mancanti] Credenziali Futuria CRM mancanti. Avvia il configuratore con launch-credential-setup.sh." >&2
+  exit 3
+fi
+if [[ -z "${location}" ]]; then
+  unset token
+  echo "[futuria-crm:id-mancante] Configurazione Futuria CRM incompleta: chiave privata presente, ID account mancante. Riapri il configuratore con launch-credential-setup.sh e ricollega l'account." >&2
+  exit 3
+fi
+if [[ -z "${token}" ]]; then
+  echo "[futuria-crm:chiave-mancante] Configurazione Futuria CRM incompleta: ID account presente, chiave privata mancante. Riapri il configuratore con launch-credential-setup.sh." >&2
   exit 3
 fi
 if [[ ! "${token}" =~ ^pit-[A-Za-z0-9._-]+$ ]] || (( ${#token} < 10 || ${#token} > 2052 )); then

@@ -1,0 +1,5 @@
+# Gli script shell e i moduli Node arrivano ai clienti con git clone: con
+# core.autocrlf=true un CRLF farebbe fallire bash su macOS.
+*.sh text eol=lf
+*.mjs text eol=lf
+*.png binary
