@@ -184,7 +184,7 @@ futuria_migrate_legacy() {
   temp=""
   if temp_name="$(futuria_temp_name)" \
     && ( umask 077 && mkdir -p -- "${FUTURIA_STATE_DIR}" ) 2>/dev/null \
-    && chmod 700 -- "${FUTURIA_STATE_DIR}" 2>/dev/null \
+    && chmod 700 "${FUTURIA_STATE_DIR}" 2>/dev/null \
     && temp="${FUTURIA_STATE_DIR}/${temp_name}" \
     && ( umask 077 && futuria_config_text "${location}" "${updated}" > "${temp}" ) 2>/dev/null; then
     # Rinomina senza sovrascrivere: ln fallisce se la destinazione esiste.

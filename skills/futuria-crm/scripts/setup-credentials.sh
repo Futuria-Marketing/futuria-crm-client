@@ -150,7 +150,9 @@ if ! temp_name="$(futuria_temp_name)"; then
   exit 2
 fi
 ( umask 077 && mkdir -p -- "${config_dir}" )
-chmod 700 -- "${config_dir}"
+# Senza "--": il chmod di macOS lo prenderebbe per un file. I percorsi sono
+# assoluti, quindi non possono sembrare opzioni.
+chmod 700 "${config_dir}"
 temp_file="${config_dir}/${temp_name}"
 trap 'rm -f -- "${temp_file}" 2>/dev/null || true' EXIT
 ( umask 077 && futuria_config_text "${location}" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "${temp_file}" )
@@ -171,7 +173,7 @@ fi
 unset stored_pit
 
 mv -f -- "${temp_file}" "${config_file}"
-chmod 600 -- "${config_file}"
+chmod 600 "${config_file}"
 
 echo "Configurazione salvata nel Portachiavi dell’utente macOS corrente."
 echo "Puoi chiudere questa finestra e tornare all’agente."

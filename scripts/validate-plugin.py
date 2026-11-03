@@ -205,6 +205,9 @@ BASH32_FORBIDDEN = [
     (re.compile(r"\b(mapfile|readarray)\b"), "mapfile/readarray"),
     (re.compile(r"\$\{[^}]*(,,|\^\^)[^}]*\}"), "${x,,} o ${x^^}"),
     (re.compile(r"\[\[\s+-v\b"), "[[ -v ]]"),
+    # Il chmod di macOS smette di leggere le opzioni al modo: "--" dopo il
+    # modo diventa un file inesistente e il comando fallisce.
+    (re.compile(r"\bchmod\s+[0-7]{3,4}\s+--"), "chmod <modo> --"),
 ]
 
 
