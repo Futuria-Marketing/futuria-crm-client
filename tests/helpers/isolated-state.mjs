@@ -153,15 +153,13 @@ export function createIsolatedState(t, { prefix = "futuria [prova] D'Angelo è-"
   })) {
     assertIsolatedPath(path, root, label);
   }
-  // Le funzioni di produzione, con l’ambiente del test, puntano qui.
-  assert.equal(
-    normalize(stateDirectory({ platform: "win32", env })),
-    normalize(state.windows.stateDir),
-  );
-  assert.equal(
-    normalize(legacyStateDirectory({ platform: "win32", env })),
-    normalize(state.windows.legacyDir),
-  );
+  // Le funzioni di produzione, con l’ambiente del test, puntano qui. Ogni
+  // sistema riconosce solo i propri percorsi assoluti: su Windows quelli con
+  // lettera di unità, altrove quelli POSIX.
+  const runtime = process.platform === "win32" ? "win32" : "darwin";
+  const expected = runtime === "win32" ? state.windows : state.mac;
+  assert.equal(normalize(stateDirectory({ platform: runtime, env })), normalize(expected.stateDir));
+  assert.equal(normalize(legacyStateDirectory({ platform: runtime, env })), normalize(expected.legacyDir));
   return state;
 }
 
