@@ -2,7 +2,7 @@
 
 Plugin ufficiale **Futuria Marketing** per collegare il proprio agente AI all’account **Futuria CRM** tramite API diretta. L’account autorizza il collegamento con un **Private Integration Token (PIT)**, presentato nel configuratore semplicemente come **chiave privata di collegamento**.
 
-Serve l’app installata sul computer: **Claude Code** (app desktop, terminale o VS Code) oppure l’**app ChatGPT per computer** in modalità **Work**. Le versioni da browser, come claude.ai o chatgpt.com, non funzionano: non possono installare la skill né aprire la configurazione protetta sul tuo computer.
+Serve un’app installata sul computer che possa lavorare sui tuoi file: **Claude Code** (nell’app Claude per computer, sezione Code, oppure nel terminale o in VS Code) o l’**app ChatGPT per computer** in modalità **Work (Codex)**. Non funzionano claude.ai, chatgpt.com né la chat normale delle app: non possono installare la skill né aprire la configurazione protetta. Resta supportato anche Codex da terminale o in VS Code.
 
 La release attuale:
 
@@ -14,7 +14,7 @@ La release attuale:
 
 ## Il testo da incollare al proprio agente
 
-Copia questo testo in una chat nuova dell’app installata sul computer: **Claude Code** (app desktop, terminale o VS Code) oppure l’**app ChatGPT per computer** in modalità **Work**. Le versioni da browser, come claude.ai o chatgpt.com, non funzionano.
+Copia questo testo in una chat nuova. Usa Claude Code o l’app ChatGPT per computer in modalità Work (Codex), non la versione da browser né la chat normale.
 
 ```text
 Installa la release stabile della skill Futuria CRM dal repository pubblico

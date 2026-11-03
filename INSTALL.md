@@ -4,7 +4,7 @@ Questa procedura è destinata all’agente AI che riceve il link del repository.
 
 ## Obiettivo
 
-1. Identificare se il runtime corrente è **Codex** o **Claude Code**. Se è una versione da browser, come claude.ai o chatgpt.com, o un ambiente cloud senza accesso al computer dell’utente, fermarsi e spiegare all’utente che serve l’app installata sul computer: **Claude Code** oppure l’**app ChatGPT per computer** in modalità **Work**.
+1. Identificare se il runtime corrente è **Codex** o **Claude Code**. Se l’agente non può eseguire comandi e scrivere file sul computer dell’utente, fermarsi e spiegare che serve **Claude Code** oppure l’**app ChatGPT per computer** in modalità **Work (Codex)**.
 2. Installare la release stabile del pacchetto Futuria CRM.
 3. Aprire il configuratore grafico locale per il collegamento protetto.
 4. Eseguire una verifica in sola lettura e comunicare soltanto nome account, versione ed esito.
