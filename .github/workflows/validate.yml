@@ -58,7 +58,7 @@ jobs:
         if: runner.os == 'macOS'
         run: for file in skills/futuria-crm/scripts/*.sh; do /bin/bash -n "$file"; done
       - name: Test configuratore e cartella di stato
-        run: node --test tests/*.test.mjs
+        run: node --test tests/credential-wizard.test.mjs tests/state-dir.test.mjs
       - name: Test PowerShell con pwsh 7
         if: runner.os == 'Windows'
         env:
