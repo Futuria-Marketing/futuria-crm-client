@@ -38,11 +38,12 @@ jobs:
           python -B scripts/build-release.py --output "$RUNNER_TEMP/futuria-release" --tag "$RELEASE_TAG"
       - name: Require the compatible customer connector before distribution
         run: |
+          curl --fail --silent --show-error --max-time 20 https://futuria-crm.account-futuria.workers.dev/health > "$RUNNER_TEMP/customer-health.json"
           python - <<'PY'
           import json
-          import urllib.request
-          with urllib.request.urlopen("https://futuria-crm.account-futuria.workers.dev/health", timeout=20) as response:
-              health = json.load(response)
+          import os
+          from pathlib import Path
+          health = json.loads((Path(os.environ["RUNNER_TEMP"]) / "customer-health.json").read_text())
           assert health.get("service") == "futuria-crm", "Wrong connector"
           assert tuple(map(int, health["version"].split("."))) >= (1, 1, 0), "Customer connector upgrade required"
           assert health.get("toolCount", 0) >= 42, "Customer catalog tools are not deployed"
