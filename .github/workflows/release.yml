@@ -1,0 +1,83 @@
+name: Release customer plugin
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: customer-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    uses: ./.github/workflows/validate.yml
+
+  release:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Require a reviewed main commit and matching version tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          git merge-base --is-ancestor HEAD origin/main
+          if git show-ref --verify --quiet refs/remotes/origin/stable; then
+            git merge-base --is-ancestor origin/stable HEAD
+          fi
+          python -B scripts/build-release.py --output "$RUNNER_TEMP/futuria-release" --tag "$RELEASE_TAG"
+      - name: Require the compatible customer connector before distribution
+        run: |
+          curl --fail --silent --show-error --max-time 20 https://futuria-crm.account-futuria.workers.dev/health > "$RUNNER_TEMP/customer-health.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          health = json.loads((Path(os.environ["RUNNER_TEMP"]) / "customer-health.json").read_text())
+          assert health.get("service") == "futuria-crm", "Wrong connector"
+          assert tuple(map(int, health["version"].split("."))) >= (1, 1, 0), "Customer connector upgrade required"
+          assert health.get("toolCount", 0) >= 42, "Customer catalog tools are not deployed"
+          print("Compatible customer connector verified")
+          PY
+      - name: Preserve build receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: futuria-crm-${{ github.ref_name }}
+          path: ${{ runner.temp }}/futuria-release/*
+          if-no-files-found: error
+      - name: Publish versioned assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" --json tagName --jq .tagName >/dev/null 2>&1; then
+            test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = false
+            mkdir "$RUNNER_TEMP/existing-release"
+            for asset in "$RUNNER_TEMP/futuria-release/"*; do
+              name=$(basename "$asset")
+              gh release download "$RELEASE_TAG" --pattern "$name" --dir "$RUNNER_TEMP/existing-release"
+              cmp "$asset" "$RUNNER_TEMP/existing-release/$name"
+            done
+            echo "Published assets match the exact committed build; resuming stable advancement."
+          else
+            gh release create "$RELEASE_TAG" "$RUNNER_TEMP/futuria-release/"* --verify-tag --title "Futuria CRM $RELEASE_TAG" --generate-notes
+          fi
+      - name: Advance the customer update channel after release succeeds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/stable" >/dev/null 2>&1; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/stable" -f sha="$GITHUB_SHA" -F force=false >/dev/null
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref=refs/heads/stable -f sha="$GITHUB_SHA" >/dev/null
+          fi

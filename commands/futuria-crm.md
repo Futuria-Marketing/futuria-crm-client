@@ -3,7 +3,7 @@ description: Lavora sul tuo account Futuria CRM (contatti, conversazioni, pipeli
 argument-hint: [richiesta-crm]
 ---
 
-Use the bundled `futuria-crm` skill to handle this Futuria CRM task. Operate on the user's account API-first through the bundled secure credential and API helpers, use the web interface only as fallback, reply in Italian, and always call the platform Futuria CRM. Never ask for or expose the private connection key in chat.
+Use the bundled `futuria-crm` skill for this customer CRM task. Prefer the connected customer MCP with OAuth and its actual schemas. The protected local PIT helpers are an explicit user-selected alternative; never silently switch channels or repeat an uncertain write. Reply in Italian and call the platform Futuria CRM. Never request or expose credentials in chat.
 
 User arguments:
 $ARGUMENTS

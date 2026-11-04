@@ -1,5 +1,7 @@
 # Content & marketing — email, social, blog
 
+Prefer the connected customer MCP specialised tools, then the catalog workflow in `references/mcp-operations.md`. The direct API paths and helper examples in this reference apply only to the explicitly chosen local PIT alternative; use actual MCP tool schemas for OAuth. Missing coverage never authorises a silent channel change.
+
 Create and manage content assets in the user's Futuria CRM account: email templates, social posts, and blog posts. Base URL and headers in `references/api-and-troubleshooting.md`.
 
 ## Email templates

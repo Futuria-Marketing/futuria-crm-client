@@ -128,6 +128,77 @@ def check_packaging():
         ERRORS.append("[pack]  privacyPolicyURL Codex mancante o non canonico")
 
 
+def unified_package_errors(root):
+    """Validate distribution wiring without executing a client or reading credentials."""
+    errors = []
+    names = ["plugin.json", "mcp.json", ".mcp.json", ".codex-plugin/plugin.json",
+             ".claude-plugin/plugin.json", ".claude-plugin/marketplace.json",
+             ".agents/plugins/marketplace.json"]
+    data = {}
+    for name in names:
+        try:
+            data[name] = json.loads((root / name).read_text(encoding="utf-8"))
+            if not isinstance(data[name], dict):
+                raise ValueError("expected JSON object")
+        except (OSError, ValueError) as exc:
+            errors.append(f"[unified] {name}: {exc}")
+    if len(data) != len(names):
+        return errors
+    portable = data["plugin.json"]
+    if portable.get("$schema") != "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json":
+        errors.append("[unified] root plugin.json must declare Agent Plugins 1.0")
+    identities = [portable, data[".codex-plugin/plugin.json"], data[".claude-plugin/plugin.json"]]
+    try:
+        version = (root / "skills/futuria-crm/VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        version = ""
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        errors.append("[unified] skill VERSION must be a stable semantic version")
+    for obj in identities:
+        if obj.get("name") != "futuria-crm" or obj.get("version") != version:
+            errors.append("[unified] root/compatibility identity or version diverges")
+    for name in [".claude-plugin/marketplace.json", ".agents/plugins/marketplace.json"]:
+        entries = data[name].get("plugins")
+        if not isinstance(entries, list) or len(entries) != 1 or not isinstance(entries[0], dict):
+            errors.append(f"[unified] {name} must expose the single customer plugin")
+            continue
+        entry = entries[0]
+        if entry.get("name") != "futuria-crm":
+            errors.append(f"[unified] {name} has an unexpected plugin identity")
+        if name.startswith(".claude"):
+            if entry.get("version") != version or entry.get("source") != "./":
+                errors.append("[unified] Claude marketplace version/source diverges")
+        elif entry.get("source") != {"source": "local", "path": "./"}:
+            errors.append("[unified] OpenAI marketplace must resolve the same local product root")
+    overlay = data[".codex-plugin/plugin.json"]
+    inline = (portable.get("extensions") or {}).get("com.openai", {})
+    if inline:
+        errors.append("[unified] use the documented compatibility overlay fallback for OpenAI metadata")
+    for obj in identities[1:]:
+        if obj.get("skills") != "./skills/" or obj.get("mcpServers") != "./.mcp.json":
+            errors.append("[unified] compatibility manifest must wire shared skills and MCP")
+    if not (root / "skills/futuria-crm/SKILL.md").is_file():
+        errors.append("[unified] shared skill entrypoint is missing")
+    for obj in identities + [inline]:
+        if "hooks" in obj or "apps" in obj:
+            errors.append("[unified] customer package must not contain updater hooks or unregistered app mappings")
+    if (root / ".app.json").exists() or (root / "hooks").exists():
+        errors.append("[unified] unexpected registered-app mapping or lifecycle hooks")
+    url = "https://futuria-crm.account-futuria.workers.dev/mcp"
+    expected_portable = {
+        "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+        "mcpServers": {"futuria-crm": {
+            "type": "streamable-http", "url": url,
+        }},
+    }
+    expected_compat = {"mcpServers": {"futuria-crm": {"type": "http", "url": url}}}
+    if data["mcp.json"] != expected_portable:
+        errors.append("[unified] portable MCP must use the protected customer HTTPS endpoint without credentials or unsupported extensions")
+    if data[".mcp.json"] != expected_compat:
+        errors.append("[unified] compatibility MCP must use the same customer HTTPS endpoint without credentials")
+    return errors
+
+
 def check_credential_contract():
     distributed_docs = [ROOT / "README.md", ROOT / "INSTALL.md"]
     unsafe = [
@@ -393,6 +464,7 @@ def main():
     check_branding()
     check_json()
     check_packaging()
+    ERRORS.extend(unified_package_errors(ROOT))
     check_credential_contract()
     check_state_dir()
     check_skills()

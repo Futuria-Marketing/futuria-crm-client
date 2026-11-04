@@ -1,5 +1,7 @@
 # Opportunities & pipelines
 
+Prefer the connected customer MCP specialised tools, then the catalog workflow in `references/mcp-operations.md`. The direct API paths and helper examples in this reference apply only to the explicitly chosen local PIT alternative; use actual MCP tool schemas for OAuth. Missing coverage never authorises a silent channel change.
+
 Track deals through the sales pipelines of the user's Futuria CRM account. Base URL and headers in `references/api-and-troubleshooting.md`.
 
 ## Endpoints (validated)

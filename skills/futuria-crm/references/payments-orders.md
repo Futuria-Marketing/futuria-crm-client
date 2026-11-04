@@ -1,5 +1,7 @@
 # Payments & orders
 
+Prefer the connected customer MCP specialised tools, then the catalog workflow in `references/mcp-operations.md`. The direct API paths and helper examples in this reference apply only to the explicitly chosen local PIT alternative; use actual MCP tool schemas for OAuth. Missing coverage never authorises a silent channel change.
+
 Read payment activity from the user's Futuria CRM account. This area is **read-only** — you inspect and report, you do not move money.
 
 ## Endpoints (validated)

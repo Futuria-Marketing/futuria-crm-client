@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "futuria-crm": {
+      "type": "http",
+      "url": "https://futuria-crm.account-futuria.workers.dev/mcp"
+    }
+  }
+}

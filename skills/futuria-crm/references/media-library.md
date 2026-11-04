@@ -1,5 +1,7 @@
 # Media Library — secure reads and file handling
 
+Prefer the connected customer MCP specialised tools, then the catalog workflow in `references/mcp-operations.md`. The direct API paths and helper examples in this reference apply only to the explicitly chosen local PIT alternative; use actual MCP tool schemas for OAuth. Missing coverage never authorises a silent channel change.
+
 Use the user's secure API helpers with version `v3` for JSON operations. Media belongs to the user's account; discover IDs and folders there. Relevant PIT scopes are `medias.readonly` for listing and `medias.write` for authorized writes. Source lookup is in `references/terminology-and-voice.md`.
 
 - List/search: `GET /medias/files?altType=location&altId={location}&type=file&sortBy=createdAt&sortOrder=desc&limit=20&offset=0`. Use `query` for search, `parentId` for a known folder; paginate with `offset`/`limit`.
