@@ -1,146 +1,77 @@
 # Installazione — istruzioni per l’agente
 
-Questa procedura è destinata all’agente AI che riceve il link del repository. L’utente non deve scegliere manualmente il runtime né incollare credenziali nella chat.
+Il pacchetto `2.0.0` contiene una sola skill condivisa, il collegamento MCP cliente e l’alternativa locale protetta. Scegli il percorso nativo disponibile nel client; non copiare istruzioni o configurazioni dell’integrazione interna di agenzia.
 
-## Obiettivo
+## Percorso consigliato: plugin con OAuth
 
-1. Identificare se il runtime corrente è **Codex** o **Claude Code**. Se l’agente non può eseguire comandi e scrivere file sul computer dell’utente, fermarsi e spiegare che serve **Claude Code** oppure l’**app ChatGPT per computer** in modalità **Work (Codex)**.
-2. Installare la release stabile del pacchetto Futuria CRM.
-3. Aprire il configuratore grafico locale per il collegamento protetto.
-4. Eseguire una verifica in sola lettura e comunicare soltanto nome account, versione ed esito.
+1. Identifica il client e il supporto a plugin, skill e MCP remoto. Non installare software di sistema o modificare configurazioni estranee per colmare un limite.
+2. Installa il plugin dal marketplace nativo. Il repository Git segue `stable`; non fissarlo a un tag se l’utente vuole il canale aggiornabile.
+3. Apri il collegamento **Futuria CRM** nel client e completa **Accedi / Connetti** nel flusso OAuth protetto. Endpoint cliente: `https://futuria-crm.account-futuria.workers.dev/mcp`.
+4. Segui `skills/futuria-crm/references/mcp-onboarding.md`: controlla gli strumenti realmente esposti e leggi il nome dell’account con `crm_get_location`, se disponibile. Una risposta del server o il catalogo visibile non provano l’autenticazione.
+5. Comunica runtime, versione da `skills/futuria-crm/VERSION`, account ed esito della lettura. Se non puoi verificare, indica il limite senza dichiarare il collegamento completato.
 
-Il collegamento usa API diretta e una credenziale chiamata **Private Integration Token (PIT)**. Nel configuratore viene indicata come **chiave privata di collegamento**. Questa release non installa né configura MCP.
+Non chiedere password, token, codici OAuth o chiavi private in chat. Non raccogliere né trasferire token tra OAuth e configuratore locale.
 
-## Regole di sicurezza
+`stable` è il canale di distribuzione: avanza dopo i controlli e la pubblicazione della release. `main` è il ramo di sviluppo. Verifica che il canale sia effettivamente disponibile prima di installarlo; non dichiarare riuscito un aggiornamento soltanto perché i sorgenti sono cambiati.
 
-- Non chiedere mai all’utente di scrivere la chiave privata nella chat.
-- Non inserirla mai in un comando, un argomento CLI, un file del progetto o un log.
-- Avviare sempre il launcher incluso: apre una pagina locale temporanea fuori dalla conversazione.
-- Non recuperare, stampare o mascherare la chiave privata.
-- Prima della prima scrittura, verificare il nome dell’account con una lettura.
+### Claude Code
 
-## Release stabile
-
-Versione del pacchetto: `v1.3.3`. I comandi seguenti richiedono che il tag e la release `v1.3.3` siano pubblicati prima della distribuzione guidata.
-
-Repository: `https://github.com/Futuria-Marketing/futuria-crm-client`.
-
-## Claude Code
-
-Per l’installazione eseguita direttamente dall’agente, usare il percorso personale ufficiale delle skill di Claude Code:
-
-1. Destinazione: `~/.claude/skills/futuria-crm-client`.
-2. Se la cartella non esiste, clonare `https://github.com/Futuria-Marketing/futuria-crm-client.git` alla release `v1.3.3` con cronologia ridotta.
-3. Se esiste già, verificare prima che sia la copia di questo repository e che non contenga modifiche locali; solo in quel caso aggiornare al tag `v1.3.3`. Non cancellare o sovrascrivere una cartella ambigua.
-4. Se Git non è disponibile, scaricare l’archivio GitHub del tag `v1.3.3` ed estrarlo atomicamente nella stessa destinazione.
-5. Eseguire `claude plugin details futuria-crm@skills-dir` quando disponibile, quindi `/reload-plugins` oppure aprire una nuova sessione.
-
-Claude Code riconosce come plugin personale ogni cartella sotto `~/.claude/skills/` che contiene `.claude-plugin/plugin.json`; non serve registrare un marketplace per questo percorso.
-
-Il marketplace resta disponibile per l’installazione manuale da una sessione Claude Code:
+In una sessione Claude Code:
 
 ```text
-/plugin marketplace add https://github.com/Futuria-Marketing/futuria-crm-client.git#v1.3.3
+/plugin marketplace add https://github.com/Futuria-Marketing/futuria-crm-client.git#stable
 /plugin install futuria-crm@futuria-crm
 ```
 
-Non aggiornare Claude Code o installare software di sistema senza aver informato l’utente.
+Apri `/plugin`, scheda **Marketplaces**, seleziona `futuria-crm` e abilita **Enable auto-update** per ricevere gli aggiornamenti del marketplace esterno. L’opzione non è necessariamente attiva inizialmente. Usa i controlli MCP del client per completare OAuth; poi ricarica i plugin o apri una nuova sessione secondo quanto richiede il client.
 
-## Codex
+Non installare la sola skill se l’obiettivo è il plugin completo con il collegamento MCP.
 
-Usare la skill di sistema `$skill-installer` per installare la skill dalla release congelata:
+### OpenAI / Codex
 
-```text
-Installa con $skill-installer dal repository Futuria-Marketing/futuria-crm-client,
-ref v1.3.3, la cartella skills/futuria-crm.
-```
+Il repository distribuisce il formato portabile Agent Plugins 1.0 (`plugin.json`, `mcp.json`, `skills/`) e il formato di compatibilità Codex. Nei client che espongono il marketplace Git puoi registrare `Futuria-Marketing/futuria-crm-client` sul ref `stable` con i controlli nativi; registrare un catalogo non equivale a installare e autenticare il plugin.
 
-Se `$skill-installer` non è disponibile, scaricare la release `v1.3.3` e copiare la cartella sotto la directory personale delle skill di Codex, senza sovrascrivere directory ambigue. Aprire una nuova chat se le skill non vengono rilevate subito.
+Per un workspace gestito, l’amministratore usa **Admin > Plugins > Add > Import marketplace**: Source `https://github.com/Futuria-Marketing/futuria-crm-client`, Path vuoto e **Branch, tag, or commit** impostato a `stable`. I marketplace nuovi si sincronizzano ogni giorno; **Sync now** richiede un controllo immediato. Dopo l’importazione o la sincronizzazione, leggere il rapporto: un processo completato può includere errori sul singolo plugin. Le policy del workspace determinano disponibilità, installazione e connessione. Non promettere la stessa sincronizzazione nelle installazioni personali Codex.
 
-Il repository include anche il manifest `.codex-plugin/plugin.json` e il marketplace `.agents/plugins/marketplace.json`. `codex plugin marketplace add Futuria-Marketing/futuria-crm-client@v1.3.3` registra il catalogo nei client che lo supportano, ma non va confuso con l’installazione della skill.
+La directory pubblica OpenAI richiede una presentazione e approvazione separate. Questo repository non contiene identificativi registrati fittizi: non creare `.app.json` con ID inventati. Se il client richiede una connessione già registrata o il plugin non compare, segnala questo requisito; non sostituire il collegamento con quello di agenzia.
 
-## Configurazione grafica protetta
+Il manifest distribuito dichiara l’endpoint HTTPS protetto; il client scopre OAuth dalla richiesta di autenticazione e dai metadati del server. Non aggiungere chiavi private o campi di autenticazione inventati al pacchetto. Per presentare il plugin nella directory pubblica, configurare separatamente OAuth nel portale OpenAI e completare i controlli della connessione: l’archivio da solo non registra né approva il servizio.
 
-Individuare la cartella installata della skill `futuria-crm`, quindi eseguire il launcher adatto al sistema operativo. Il launcher usa Node.js 20 o successivo, già presente nella maggior parte degli ambienti Codex e Claude Code, per aprire una pagina raggiungibile soltanto su `127.0.0.1`. Il launcher avvia il configuratore in un processo separato, attende che sia pronto, stampa l’indirizzo della pagina e termina; se il configuratore non parte, lo segnala con un errore. Il configuratore resta attivo finché la pagina è aperta e in primo piano; si ferma da solo dopo il collegamento, dopo 45 minuti in cui la pagina resta chiusa o in un’altra scheda, e comunque dopo 3 ore. In quel caso la pagina lo segnala.
+### Archivi fissi e passaggio dalla 1.3.3
 
-La pagina:
+Tag e ZIP di release restano snapshot immutabili. Prima di passare da una copia `v1.3.3` al marketplace aggiornabile, verifica origine, percorso, versione e modifiche locali; spiega la nuova modalità OAuth. Non cancellare copie ambigue, sostituire modifiche locali, revocare il PIT o modificare la connessione già funzionante. Evita che due copie della stessa skill siano attive nello stesso client. Il passaggio richiede una scelta esplicita dell’utente e una nuova verifica in sola lettura.
 
-- mostra soltanto il modulo con il link dell’account e la chiave privata;
-- accanto a ciascun campo offre una guida in finestra: per il link, dove copiarlo; per la chiave, un video breve e tre passaggi con schermate Futuria CRM;
-- accetta il link completo dell’account ed estrae automaticamente l’ID;
-- verifica la chiave in sola lettura;
-- salva la credenziale con la protezione nativa del sistema operativo;
-- restituisce all’agente soltanto l’esito e il nome dell’account.
+La `2.0.0` nei manifest è la versione preparata dai sorgenti: dichiarala pubblicata solo dopo verifica della release o della directory pertinente.
 
-### Windows
+## Alternativa esplicita: PIT locale protetto
 
-Dal terminale dell’agente eseguire:
+Usala se l’utente sceglie la chiave privata, oppure dopo aver spiegato una funzione mancante in OAuth e aver ricevuto la scelta di questo percorso. Un errore di ambito, una funzione mancante o una scrittura incerta non autorizzano il passaggio automatico.
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<skill-futuria-crm>\scripts\launch-credential-setup.ps1"
-```
+Installa il pacchetto completo o, se serve soltanto questa alternativa, la cartella `skills/futuria-crm` con il percorso ufficiale delle skill del client. Per una copia fissa scegli una release effettivamente pubblicata, senza promettere aggiornamenti automatici. Per Codex puoi usare `$skill-installer` con repository `Futuria-Marketing/futuria-crm-client`, percorso `skills/futuria-crm` e il ref concordato. Non sovrascrivere copie ambigue.
 
-Il browser apre il configuratore. Dopo la verifica, la chiave viene cifrata con Windows DPAPI per l’utente corrente. Chiave cifrata e ID account, che non è un segreto, stanno nella cartella dedicata della skill `%USERPROFILE%\.futuria-crm-skill\`, separata da quella dell’app desktop Futuria CRM.
-
-### macOS
-
-Dal terminale dell’agente eseguire:
-
-```bash
-bash "<skill-futuria-crm>/scripts/launch-credential-setup.sh"
-```
-
-Il browser apre lo stesso configuratore. Dopo la verifica, la chiave viene salvata nel Portachiavi dell’utente macOS senza comparire negli argomenti di processo o nel profilo shell. L’ID account sta nella cartella dedicata della skill `~/Library/Application Support/com.futuriamarketing.futuria-crm-skill/`, separata da quella dell’app desktop Futuria CRM.
-
-### Aggiornamento dalla 1.3.2 o precedenti
-
-Fino alla 1.3.2 la skill usava la cartella dell’app desktop Futuria CRM. Dalla 1.3.3 copia da sola i propri file nella nuova cartella al primo controllo, senza toccare quelli dell’app. Chi usa anche l’app desktop dovrà ricollegare l’account una volta: quando lo stato dice `Serve ricollegare l'account`, avviare il launcher una sola volta.
-
-Aggiorna il plugin in tutti gli agenti che usi sullo stesso computer, per esempio Claude Code e Codex, e riavvia le sessioni aperte. Finché un’installazione resta alla versione precedente continua a usare la vecchia cartella: se ci si ricollega da lì, può scollegare l’app desktop e la versione aggiornata resta sul collegamento precedente.
-
-### Fallback senza Node.js
-
-Se `node` non è disponibile, lo stesso launcher apre automaticamente il prompt protetto precedente:
-
-- PowerShell con input nascosto e DPAPI su Windows;
-- Terminale con input nascosto e Portachiavi su macOS.
-
-Anche il prompt salva soltanto nella cartella dedicata della skill.
-
-Non installare Node.js soltanto per il configuratore senza prima informare l’utente.
-
-### Linux
-
-Il percorso protetto automatizzato è previsto per Windows e macOS. Su Linux usare variabili d’ambiente impostate personalmente dall’utente in un terminale separato; non far transitare i valori nella chat.
-
-## Verifica finale in sola lettura
+Segui `skills/futuria-crm/references/getting-started.md` per lo stato, la configurazione protetta e la verifica. Il launcher apre una pagina temporanea solo su `127.0.0.1`; usa Node.js 20 o successivo, oppure il prompt protetto nativo se Node.js manca. Non installare Node.js senza informare l’utente.
 
 Windows:
 
 ```powershell
-& "<skill-futuria-crm>\scripts\crm-api.ps1" -Method GET -Path "/locations/{location}"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<skill-dir>\scripts\launch-credential-setup.ps1"
 ```
 
 macOS:
 
 ```bash
-bash "<skill-futuria-crm>/scripts/crm-api.sh" GET "/locations/{location}"
+bash "<skill-dir>/scripts/launch-credential-setup.sh"
 ```
 
-Confermare all’utente soltanto:
+La chiave è protetta da DPAPI su Windows in `%USERPROFILE%\.futuria-crm-skill\`, o nel Portachiavi su macOS con l’ID in `~/Library/Application Support/com.futuriamarketing.futuria-crm-skill/`. Questa cartella resta separata dall’app desktop Futuria CRM. Gli helper sicuri e le regole di migrazione delle versioni precedenti restano invariati. Su Linux le variabili d’ambiente, impostate personalmente fuori dalla chat, sono un’alternativa tecnica esplicita.
 
-- runtime installato;
-- versione letta dal file `VERSION`;
-- nome dell’account collegato;
-- esito della verifica.
+Non recuperare, stampare o mascherare la chiave; non metterla negli argomenti dei comandi, nei file del progetto o nei log. La rimozione locale e la revoca del PIT sono azioni distinte dalla disconnessione OAuth.
 
-Se la lettura fallisce per permessi, usare la sanity read contatti documentata in `skills/futuria-crm/references/getting-started.md`. Non sostituire la chiave prima di aver classificato l’errore.
+## Distribuzione e aggiornamenti: fonti ufficiali
 
-## Aggiornamenti
+- [Pacchetti OpenAI](https://developers.openai.com/plugins/build/plugins): formati portabile e di compatibilità.
+- [Presentazione OpenAI](https://developers.openai.com/plugins/deploy/submission): aggiornamenti MCP soggetti ai controlli e nuovo ZIP per le skill.
+- [Aggiornamenti Claude Code](https://code.claude.com/docs/en/discover-plugins#keep-plugins-updated): opt-in del marketplace esterno.
+- [Gestione workspace OpenAI](https://learn.chatgpt.com/docs/enterprise/plugin-management): importazione GitHub e sincronizzazione controllate dall’amministratore.
 
-Non esiste un aggiornamento silenzioso in background. Prima di una nuova configurazione, o quando l’utente chiede di verificare gli aggiornamenti:
-
-1. leggere la versione locale da `VERSION`;
-2. confrontarla con l’ultima GitHub Release stabile del repository;
-3. se esiste una versione più recente, informare l’utente e proporre l’aggiornamento;
-4. aggiornare soltanto una copia riconosciuta, pulita e senza modifiche locali, dopo conferma.
+Il pacchetto non installa updater, daemon o hook di aggiornamento. Una modifica locale non prova distribuzione, approvazione o accesso autenticato nel cliente.

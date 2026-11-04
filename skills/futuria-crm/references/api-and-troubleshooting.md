@@ -1,6 +1,6 @@
 # Direct API — foundation & troubleshooting
 
-The direct API is the **primary channel** for operating the user's Futuria CRM account. This file carries the request foundation shared by every area reference, plus the error matrix.
+The direct API is the **explicit local PIT alternative**. Use this foundation and error matrix only after the user chooses that path. OAuth customer MCP remains preferred; its tool schemas differ from the endpoint examples below. Missing OAuth scope does not authorise a silent fallback or retry of an uncertain write.
 
 > **Technical-host note.** The platform's underlying technical host may appear only in this reference and in the bundled API helpers, because it is part of real endpoint URLs and error payloads. It is infrastructure, not a brand: **never surface the host name to the user, and never use it as the name of the platform.** To the user, everything here is **Futuria CRM**. See `references/terminology-and-voice.md`.
 

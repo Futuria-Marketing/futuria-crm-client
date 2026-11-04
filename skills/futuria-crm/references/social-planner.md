@@ -1,5 +1,7 @@
 # Social Planner — posts, statistics and comments
 
+Prefer the connected customer MCP specialised tools, then the catalog workflow in `references/mcp-operations.md`. The direct API paths and helper examples in this reference apply only to the explicitly chosen local PIT alternative; use actual MCP tool schemas for OAuth. Missing coverage never authorises a silent channel change.
+
 Use the secure helpers in `references/api-and-troubleshooting.md`, with API version `v3`. All IDs come from the user's connected profiles and CRM users. Technical field names below are direct API camelCase, not tool arguments.
 
 ## Read and resolve

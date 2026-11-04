@@ -1,5 +1,7 @@
 # Workflows, forms and consent
 
+Prefer the connected customer MCP specialised tools, then the catalog workflow in `references/mcp-operations.md`. The direct API paths and helper examples in this reference apply only to the explicitly chosen local PIT alternative; use actual MCP tool schemas for OAuth. Missing coverage never authorises a silent channel change.
+
 Use the secure API helpers and the user's configured account. Discover workflow IDs, field IDs and tag names from that account.
 
 ## Read and inspect

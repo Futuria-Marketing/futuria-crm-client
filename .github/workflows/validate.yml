@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   validate:
@@ -31,6 +35,10 @@ jobs:
           if ($failed) { exit 1 }
       - name: Valida plugin (white-label, JSON, skill, reference)
         run: python scripts/validate-plugin.py
+      - name: Test contratti del pacchetto unico
+        run: python -B -m unittest discover -s tests -p 'test_*.py'
+      - name: Test archivio riproducibile e perimetro dei file distribuiti
+        run: python -B tests/build-release.test.py
 
   credential-wizard:
     name: credential-wizard (${{ matrix.os }}, Node ${{ matrix.node }})
@@ -50,7 +58,7 @@ jobs:
         if: runner.os == 'macOS'
         run: for file in skills/futuria-crm/scripts/*.sh; do /bin/bash -n "$file"; done
       - name: Test configuratore e cartella di stato
-        run: node --test tests/credential-wizard.test.mjs tests/state-dir.test.mjs
+        run: node --test tests/*.test.mjs
       - name: Test PowerShell con pwsh 7
         if: runner.os == 'Windows'
         env:

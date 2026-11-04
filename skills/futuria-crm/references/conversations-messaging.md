@@ -1,5 +1,7 @@
 # Conversations & messaging
 
+Prefer the connected customer MCP specialised tools, then the catalog workflow in `references/mcp-operations.md`. The direct API paths and helper examples in this reference apply only to the explicitly chosen local PIT alternative; use actual MCP tool schemas for OAuth. Missing coverage never authorises a silent channel change.
+
 Read and send messages in the user's Futuria CRM account (the unified conversations inbox). Base URL and headers in `references/api-and-troubleshooting.md`.
 
 ## Endpoints (validated)

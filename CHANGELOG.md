@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.0 — 2026-11-04
+
+- Un solo plugin cliente con skill condivisa, MCP ospitato e OAuth come collegamento consigliato. Formato portabile Agent Plugins 1.0 e compatibilità Codex/Claude.
+- Strumenti specifici prima del catalogo documentato; disponibilità, ambiti OAuth e qualificazione autenticata restano verifiche distinte.
+- PIT locale protetto mantenuto come alternativa esplicita, con gli stessi helper e cartella separata dall’app desktop. Nessun passaggio silenzioso né ripetizione di scritture incerte su un altro canale.
+- Marketplace Git sul ramo `stable`, promosso dopo i controlli di release. Aggiornamenti nativi secondo le impostazioni del client. Tag e archivi restano immutabili; le copie 1.3.3 non vengono migrate automaticamente.
+- Sorgenti preparati: pubblicazione della release, revisione della directory e verifica autenticata richiedono prove separate.
+
 ## 1.3.3 — 2026-11-03
 
 Correzione: la skill usava la stessa cartella dell’app desktop Futuria CRM.

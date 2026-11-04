@@ -1,6 +1,6 @@
 # Getting started — protected connection and verification
 
-Use this reference when the agent must connect the user's Futuria CRM account for the first time or diagnose missing credentials.
+Use this reference only after the user chooses the protected local PIT alternative. OAuth/MCP is preferred; for connection or scope errors start with `references/mcp-onboarding.md`. Do not inspect local credentials or open this wizard as a silent fallback from MCP.
 
 ## 1. Connection model
 
@@ -11,7 +11,7 @@ The account uses two distinct values:
 | Private Integration Token (PIT), shown as **private connection key** | Authorises API requests; starts with `pit-` | Yes |
 | Account id | Identifies the user's Futuria CRM account | No |
 
-Preferred storage:
+Protected local storage:
 
 - Windows: private key encrypted with Windows DPAPI for the current user, plus the account id, in the skill's own folder `%USERPROFILE%\.futuria-crm-skill\`.
 - macOS: private key in macOS Keychain; account id in `~/Library/Application Support/com.futuriamarketing.futuria-crm-skill/config.json`.
@@ -131,7 +131,7 @@ This removes only the local copy. Revoking the private key itself is a separate 
 
 ## 5. Version check
 
-Read the installed version from `<skill-dir>/VERSION`. Before a new setup, or when the user asks about updates, compare it with the latest stable GitHub Release. Inform the user when an update exists; do not silently overwrite an installed copy or discard local changes.
+Read the installed version from `<skill-dir>/VERSION`. Native marketplace updates follow the client and its configured update policy; fixed tag copies remain fixed. For a manual update, verify the source, preserve local changes and get an explicit migration choice before replacing an older fixed copy. Do not create a custom updater or silently switch connection methods.
 
 ## 6. Reporting
 

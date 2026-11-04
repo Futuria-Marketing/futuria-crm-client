@@ -1,0 +1,19 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "futuria-crm",
+  "version": "2.0.0",
+  "description": "Assistente per il tuo account Futuria CRM: skill condivisa e connessione OAuth tramite MCP; collegamento locale protetto disponibile come alternativa esplicita. Risposte in italiano.",
+  "author": {
+    "name": "Futuria Marketing",
+    "email": "fabrizio@futuriamarketing.com",
+    "url": "https://futuriamarketing.com"
+  },
+  "homepage": "https://futuriamarketing.com",
+  "repository": "https://github.com/Futuria-Marketing/futuria-crm-client",
+  "license": "UNLICENSED",
+  "keywords": [
+    "futuria",
+    "futuria-crm",
+    "crm"
+  ]
+}
